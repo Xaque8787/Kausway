@@ -1,5 +1,8 @@
 # Run the Kausway host
 
+For a short walkthrough, start with [Quick start: local testing](local-testing.md).
+See the [complete CLI reference](../operations/cli-reference.md) for all arguments.
+
 Private remote access to a home media server over [Iroh](https://www.iroh.computer/) peer-to-peer connections, without port forwarding or a hosted backend.
 
 The core is a standalone Rust host, `kausway-host`. It knows nothing about Jellyfin. It forwards HTTP requests from paired devices to one configurable local origin. Jellyfin is the first integration, through an admin plugin. Another media server could bundle the same executable.

@@ -7,6 +7,9 @@ through the Android SDK or development CLI. Jellyfin is the reference server int
 
 ## Start here
 
+- [Quick start: local testing](docs/getting-started/local-testing.md): download the CLIs, start a host, pair a client and access any HTTP origin.
+- [Complete CLI reference](docs/operations/cli-reference.md): every command, argument and environment variable.
+
 - [Run the host](docs/getting-started/host.md): CLI, pairing, Docker and configuration.
 - [Use the Android SDK](docs/android/README.md): AAR integration, lifecycle and media routing.
 - [Integrate a server](docs/integrations/host.md): host process and authenticated control API.
