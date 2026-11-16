@@ -1,0 +1,17 @@
+.git
+.github
+.v3
+.env
+iroh/target
+jellyfin-plugin/**/bin
+jellyfin-plugin/**/obj
+config
+cache
+media
+iroh-data
+iroh-client-data
+
+# Android consumers and their generated SDK artifacts are not part of the server image.
+android
+dist
+**/__pycache__
