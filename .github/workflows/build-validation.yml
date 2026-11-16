@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-24.04
     defaults:
       run:
-        working-directory: iroh
+        working-directory: rust
     steps:
       - uses: actions/checkout@v5
 
@@ -42,8 +42,8 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            iroh/target
-          key: cargo-${{ runner.os }}-${{ env.RUST_TOOLCHAIN }}-${{ hashFiles('iroh/Cargo.lock') }}
+            rust/target
+          key: cargo-${{ runner.os }}-${{ env.RUST_TOOLCHAIN }}-${{ hashFiles('rust/Cargo.lock') }}
           restore-keys: cargo-${{ runner.os }}-${{ env.RUST_TOOLCHAIN }}-
 
       # If Cargo.lock is stale, regenerate it so the remaining checks still run, publish the
@@ -58,7 +58,7 @@ jobs:
             cargo update --workspace
             echo "flag=" >> "$GITHUB_OUTPUT"
             echo "stale=true" >> "$GITHUB_OUTPUT"
-            echo "::error file=iroh/Cargo.lock::Cargo.lock is out of date. Download the 'corrected-cargo-lock' artifact from this run and commit it as iroh/Cargo.lock."
+            echo "::error file=rust/Cargo.lock::Cargo.lock is out of date. Download the 'corrected-cargo-lock' artifact from this run and commit it as rust/Cargo.lock."
           fi
 
       - name: Upload corrected Cargo.lock
@@ -66,7 +66,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: corrected-cargo-lock
-          path: iroh/Cargo.lock
+          path: rust/Cargo.lock
 
       - name: Formatting
         id: fmt
@@ -103,16 +103,16 @@ jobs:
         continue-on-error: true
         run: |
           set -eux
-          cargo build ${{ steps.lock.outputs.flag }} -p iroh-host
-          ./target/debug/iroh-host --version
-          id_first=$(./target/debug/iroh-host identity --data-dir "$RUNNER_TEMP/smoke")
-          id_second=$(./target/debug/iroh-host identity --data-dir "$RUNNER_TEMP/smoke")
+          cargo build ${{ steps.lock.outputs.flag }} -p kausway-host
+          ./target/debug/kausway-host --version
+          id_first=$(./target/debug/kausway-host identity --data-dir "$RUNNER_TEMP/smoke")
+          id_second=$(./target/debug/kausway-host identity --data-dir "$RUNNER_TEMP/smoke")
           test -n "$id_first" && test "$id_first" = "$id_second"
           test "$(stat -c %a "$RUNNER_TEMP/smoke/identity.key")" = "600"
           test "$(stat -c %a "$RUNNER_TEMP/smoke")" = "700"
           test "$(stat -c %a "$RUNNER_TEMP/smoke/state.json" 2>/dev/null || echo none)" = "none"
           # No origin is listening on port 9, so doctor must report a failure and exit non-zero.
-          if ./target/debug/iroh-host doctor --data-dir "$RUNNER_TEMP/smoke" --origin http://127.0.0.1:9; then
+          if ./target/debug/kausway-host doctor --data-dir "$RUNNER_TEMP/smoke" --origin http://127.0.0.1:9; then
             echo "doctor should fail without a reachable origin" && exit 1
           fi
           test "$(stat -c %a "$RUNNER_TEMP/smoke/state.json")" = "600"
@@ -122,7 +122,7 @@ jobs:
         continue-on-error: true
         timeout-minutes: 5
         run: |
-          cargo build ${{ steps.lock.outputs.flag }} -p iroh-host --bins
+          cargo build ${{ steps.lock.outputs.flag }} -p kausway-host --bins
           bash ../scripts/ci/e2e.sh target/debug
 
       - name: Summary
@@ -156,7 +156,7 @@ jobs:
     runs-on: ubuntu-24.04
     defaults:
       run:
-        working-directory: iroh
+        working-directory: rust
     steps:
       - uses: actions/checkout@v5
       - name: Install MSRV toolchain
@@ -182,14 +182,14 @@ jobs:
         with:
           global-json-file: jellyfin-plugin/global.json
       - name: Build
-        run: dotnet build Jellyfin.Plugin.Iroh/Jellyfin.Plugin.Iroh.csproj -c Release
+        run: dotnet build Jellyfin.Plugin.Kausway/Jellyfin.Plugin.Kausway.csproj -c Release
       - name: Tests
-        run: dotnet test Jellyfin.Plugin.Iroh.Tests/Jellyfin.Plugin.Iroh.Tests.csproj -c Release
+        run: dotnet test Jellyfin.Plugin.Kausway.Tests/Jellyfin.Plugin.Kausway.Tests.csproj -c Release
       - name: Dashboard page script parses
         run: |
           python3 - <<'EOF' > "$RUNNER_TEMP/configPage.js"
           import re
-          html = open("Jellyfin.Plugin.Iroh/Configuration/configPage.html", encoding="utf-8").read()
+          html = open("Jellyfin.Plugin.Kausway/Configuration/configPage.html", encoding="utf-8").read()
           scripts = re.findall(r"<script[^>]*>(.*?)</script>", html, re.S)
           assert len(scripts) == 1, scripts
           print(scripts[0])
@@ -208,9 +208,9 @@ jobs:
         with:
           context: .
           load: true
-          tags: jellyfin-iroh:ci
+          tags: kausway:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Smoke test
         timeout-minutes: 10
-        run: bash scripts/ci/docker-smoke.sh jellyfin-iroh:ci
+        run: bash scripts/ci/docker-smoke.sh kausway:ci

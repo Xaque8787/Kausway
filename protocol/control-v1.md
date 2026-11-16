@@ -1,12 +1,12 @@
 # Control API v1 (media server plugin to host)
 
-Status: implemented in `iroh/crates/iroh-host/src/control.rs`. Used by the Jellyfin plugin. Designed so any media server (for example KMS) can manage the same `iroh-host` executable.
+Status: implemented in `rust/crates/kausway-host/src/control.rs`. Used by the Jellyfin plugin. Designed so any media server (for example KMS) can manage the same `kausway-host` executable.
 
 The control API is separate from the device transport (`transport-v1.md`) and is versioned independently.
 
 ## Transport
 
-- HTTP/1.1 with JSON bodies on a TCP listener. Default `127.0.0.1:47950`, set with `--control-listen` / `IROH_CONTROL_LISTEN`, or `off` to disable it.
+- HTTP/1.1 with JSON bodies on a TCP listener. Default `127.0.0.1:47950`, set with `--control-listen` / `KAUSWAY_CONTROL_LISTEN`, or `off` to disable it.
 - By default the host only binds loopback addresses. A non-loopback address needs `--control-allow-remote`, because the API can create invitations.
 - Requests are limited to 16 KiB bodies. Responses are `application/json; charset=utf-8`.
 - Every path is prefixed with the major version, `/v1/`. Breaking changes get `/v2/`, and a host may serve both during a transition. Fields may be added to v1 responses, and clients must ignore unknown fields.
@@ -19,7 +19,7 @@ Every endpoint except `GET /v1/health` requires:
 Authorization: Bearer <control token>
 ```
 
-The token is the trimmed content of `control.token` in the host's data directory. `serve` creates it on first start with 256 random bits and owner-only permissions; an existing file shorter than 32 characters stops `serve` with an error rather than being replaced. Setting `IROH_CONTROL_TOKEN` (at least 32 characters) uses that value instead, and nothing is written. The host compares SHA-256 digests of the presented and expected tokens, so timing does not reveal how much of a guess matched. A missing or wrong token gets `401`.
+The token is the trimmed content of `control.token` in the host's data directory. `serve` creates it on first start with 256 random bits and owner-only permissions; an existing file shorter than 32 characters stops `serve` with an error rather than being replaced. Setting `KAUSWAY_CONTROL_TOKEN` (at least 32 characters) uses that value instead, and nothing is written. The host compares SHA-256 digests of the presented and expected tokens, so timing does not reveal how much of a guess matched. A missing or wrong token gets `401`.
 
 The plugin, or any embedding server, reads the same file (or is given the same environment variable). Anyone who can read the data directory can manage the host. That is intended: the data directory already holds the host's private key.
 
@@ -121,7 +121,7 @@ Response `201`:
 
 ```json
 {"id":"inv-3feafff70d54","label":"Phone","created_at":1793740000,"expires_at":1793743600,
- "link":"jellyfin-iroh://invite/eyJ2Ijox..."}
+ "link":"kausway://invite/eyJ2Ijox..."}
 ```
 
 The link holds the plaintext token. It is returned only once.
@@ -134,7 +134,7 @@ Cancels an unredeemed invitation: `204`, or `404`.
 
 Request: `{"policy":"auto|relay_only|p2p_only"}`. Response `200` has the same shape as `status.policy`. It returns `409` when `relay_only` is requested but relays are disabled.
 
-The policy is saved in `state.json`. Request admission follows it immediately. Starting or stopping relay-only transports needs a host restart, which `restart_required` reports. A `--policy` / `IROH_TRANSPORT_POLICY` setting overrides the saved value at every start.
+The policy is saved in `state.json`. Request admission follows it immediately. Starting or stopping relay-only transports needs a host restart, which `restart_required` reports. A `--policy` / `KAUSWAY_TRANSPORT_POLICY` setting overrides the saved value at every start.
 
 ### `PUT /v1/websocket`
 
@@ -144,6 +144,6 @@ Request: `{"enabled":true|false,"origin_header":"rewrite|pass_through"}`. Both f
 {"enabled":true,"origin_header":"rewrite"}
 ```
 
-The settings are saved in `state.json` and apply without a restart. A new WebSocket checks them when it opens, and open WebSockets re-check them every 2 seconds, so turning WebSockets off closes the open ones. Plain HTTP requests are never affected. `--websockets` / `IROH_WEBSOCKETS` and `--websocket-origin` / `IROH_WEBSOCKET_ORIGIN` override the saved values at every start.
+The settings are saved in `state.json` and apply without a restart. A new WebSocket checks them when it opens, and open WebSockets re-check them every 2 seconds, so turning WebSockets off closes the open ones. Plain HTTP requests are never affected. `--websockets` / `KAUSWAY_WEBSOCKETS` and `--websocket-origin` / `KAUSWAY_WEBSOCKET_ORIGIN` override the saved values at every start.
 
 `status` includes the current `websocket` object, and each entry in `sessions` includes `active_websockets`.

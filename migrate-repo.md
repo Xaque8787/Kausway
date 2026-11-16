@@ -1,6 +1,12 @@
 # Future repository and product organization
 
-Status: discussion draft. This document proposes future work; it does not change
+Status: historical architecture proposal. SDK validation/stabilization and the
+Kausway repository/name decision are complete. Baseline import is complete;
+Kausway naming/configuration is implemented locally. Maven Central, iOS and
+additional platform/UI work are deferred until after migration. See
+[the migration validation record](docs/migration/kausway-naming.md).
+
+This document proposes future work; it does not change
 the current architecture, release process, protocol, or supported platforms.
 
 ## Goal
@@ -234,5 +240,5 @@ and document the upgrade path, including identity and pairing preservation.
 - Supported server child-process and host-sidecar deployment patterns.
 - Signing, release cadence and long-term API compatibility commitments.
 
-The next practical milestone remains real Jellyfin Android TV integration. That
-will tell us which improvements the reusable SDK needs before a repository move.
+The immediate milestone is validating Kausway workflows and manual build artifacts
+after the clean-break naming changes.

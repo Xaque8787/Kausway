@@ -6,14 +6,14 @@
 | `relay_only` | All traffic through the configured relay | `best_effort_path_gate` |
 | `p2p_only` | Media only over a verified direct path | `best_effort_path_gate` |
 
-The host reports this label through `iroh-host doctor`. It will also appear in the control API status (Milestone 3). No restricted policy is reported as strictly enforced.
+The host reports this label through `kausway-host doctor`. It will also appear in the control API status (Milestone 3). No restricted policy is reported as strictly enforced.
 
 ## What this build does
 
 Every HTTP request is checked against the connection's currently selected path before it is forwarded:
 
 - `p2p_only` waits up to 5 seconds for Iroh to select a direct path. If the selected path is still relay or unknown, it refuses the request with `transport_policy_denied`. It does not fall back to relay playback.
-- `relay_only` refuses requests while the selected path is direct. The host also starts its endpoint with IP transports removed (`Builder::clear_ip_transports()`), so it has no direct sockets and every path it can open goes through the relay. `relay_only` is rejected at startup when relays are disabled (`IROH_RELAY_URL=none`).
+- `relay_only` refuses requests while the selected path is direct. The host also starts its endpoint with IP transports removed (`Builder::clear_ip_transports()`), so it has no direct sockets and every path it can open goes through the relay. `relay_only` is rejected at startup when relays are disabled (`KAUSWAY_RELAY_URL=none`).
 - Changing the policy away from `relay_only` takes effect after a restart, because the endpoint's transports are fixed when it starts.
 - Path changes are logged with their RTT, and the client's `status` command shows the path Iroh reports.
 

@@ -1,3 +1,6 @@
+> Historical validation record from the source repository before the Kausway rename.
+> Commands below use current names; these results do not validate the renamed build.
+
 # SDK 0.1.0 validation record
 
 Validated in the development environment on November 11, 2026. These results
@@ -34,7 +37,7 @@ or a completed GitHub Actions run.
 - `:sample:assembleDebug` compiled an application that consumes the standalone AAR
   as a file dependency. Its APK contains all three native libraries and passed
   `zipalign -c -P 16 4`.
-- `:iroh-client:assembleDebugAndroidTest` compiled the Android instrumentation APK.
+- `:kausway-client:assembleDebugAndroidTest` compiled the Android instrumentation APK.
 - Gradle wrapper checksum/version, workflow YAML, Android XML and shell syntax
   checks passed. Existing host/plugin version consistency check passed.
 

@@ -2,14 +2,14 @@
 .github
 .v3
 .env
-iroh/target
+rust/target
 jellyfin-plugin/**/bin
 jellyfin-plugin/**/obj
 config
 cache
 media
-iroh-data
-iroh-client-data
+kausway-data
+kausway-client-data
 
 # Android consumers and their generated SDK artifacts are not part of the server image.
 android

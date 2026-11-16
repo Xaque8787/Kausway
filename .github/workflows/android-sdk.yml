@@ -2,9 +2,9 @@ name: Android SDK
 on:
   push:
     branches: ["**"]
-    paths: ['iroh/**', 'android/**', 'scripts/android/**', '.github/workflows/android-sdk.yml']
+    paths: ['rust/**', 'android/**', 'scripts/android/**', '.github/workflows/android-sdk.yml']
   pull_request:
-    paths: ['iroh/**', 'android/**', 'scripts/android/**', '.github/workflows/android-sdk.yml']
+    paths: ['rust/**', 'android/**', 'scripts/android/**', '.github/workflows/android-sdk.yml']
   workflow_dispatch:
   workflow_call:
 permissions:
@@ -41,32 +41,32 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            iroh/target
+            rust/target
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: sdk-${{ runner.os }}-${{ hashFiles('iroh/Cargo.lock', 'android/**/*.gradle.kts', 'android/gradle/wrapper/gradle-wrapper.properties') }}
+          key: sdk-${{ runner.os }}-${{ hashFiles('rust/Cargo.lock', 'android/**/*.gradle.kts', 'android/gradle/wrapper/gradle-wrapper.properties') }}
           restore-keys: sdk-${{ runner.os }}-
       - name: Emulator invitation fixture tests
         run: python3 -m unittest discover -s scripts/android -p 'test_*.py'
       - name: Rust tests and lint
-        working-directory: iroh
+        working-directory: rust
         run: |
           cargo fmt --all --check
           cargo clippy --workspace --all-targets --locked -- -D warnings
           cargo test --workspace --locked
-          cargo build --locked -p iroh-host --bins
+          cargo build --locked -p kausway-host --bins
           bash ../scripts/ci/e2e.sh target/debug
       - name: Build and inspect AAR
         run: ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.2.12479018" bash scripts/android/build-aar.sh
       - name: Independent AAR consumer compiles
         working-directory: android
-        run: ./gradlew :sample:assembleDebug :iroh-client:assembleDebugAndroidTest
+        run: ./gradlew :sample:assembleDebug :kausway-client:assembleDebugAndroidTest
       - uses: actions/upload-artifact@v4
         with:
-          name: iroh-client-android-${{ steps.version.outputs.version }}
+          name: kausway-client-android-${{ steps.version.outputs.version }}
           path: |
-            dist/iroh-client-android-${{ steps.version.outputs.version }}.*
-            android/iroh-client/src/main/jniLibs/*/*.so
+            dist/kausway-client-android-${{ steps.version.outputs.version }}.*
+            android/kausway-client/src/main/jniLibs/*/*.so
             android/sample/build/outputs/apk/debug/*.apk
           if-no-files-found: error
       - name: Enable KVM access
@@ -86,11 +86,11 @@ jobs:
       - name: Upload SDK release assets
         uses: actions/upload-artifact@v4
         with:
-          name: jellyfin-iroh-android-sdk
-          path: dist/iroh-client-android-${{ steps.version.outputs.version }}.*
+          name: kausway-android-sdk
+          path: dist/kausway-client-android-${{ steps.version.outputs.version }}.*
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: android-sdk-test-results
-          path: android/iroh-client/build/reports/androidTests/
+          path: android/kausway-client/build/reports/androidTests/

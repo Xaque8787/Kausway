@@ -1,4 +1,4 @@
-# Iroh Client Android SDK 0.4.0
+# Kausway Android SDK 0.4.0
 
 Transport for existing Android HTTP clients and players. The SDK pairs with the
 unchanged protocol-v1 host and exposes its HTTP origin through an embedded loopback
@@ -6,7 +6,7 @@ proxy. It does not decode media, transcode, host Jellyfin, or require a terminal
 
 ## Artifact and requirements
 
-- Artifact: `iroh-client-android-0.4.0.aar`; namespace `io.github.xaque8787.iroh`.
+- Artifact: `kausway-client-android-0.4.0.aar`; namespace `io.github.xaque8787.kausway`.
 - Kotlin 2.1.20+ consumer toolchain; compiled JVM target 17.
 - Minimum Android API 24, arm64-v8a, armeabi-v7a and x86_64. No 32-bit x86 build:
   modern emulators use x86_64, and real 32-bit ARM devices use armeabi-v7a.
@@ -18,15 +18,15 @@ proxy. It does not decode media, transcode, host Jellyfin, or require a terminal
   runtime below. Kotlin's normal Android plugin supplies the Kotlin standard library.
   No Rust installation, JNA, native pointer handling or separate .so download is needed.
 
-Download `iroh-client-android-0.4.0.aar` directly from the project's
-[GitHub Releases](https://github.com/Xaque8787/iroh-jellyfin/releases). Verify its
+After the first Kausway release is published, download `kausway-client-android-0.4.0.aar` from the project's
+[GitHub Releases](https://github.com/Xaque8787/Kausway/releases). Verify its
 accompanying SHA-256 checksum and place the AAR in `app/libs`. Development builds
 are also available in the **Android SDK** workflow's versioned artifact:
 
 ```kotlin
 plugins { id("org.jetbrains.kotlin.android") }
 dependencies {
-    implementation(files("libs/iroh-client-android-0.4.0.aar"))
+    implementation(files("libs/kausway-client-android-0.4.0.aar"))
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 }
 ```
@@ -44,16 +44,16 @@ as a file dependency rather than using the SDK's Gradle project directly.
 ## Initialize, pair and connect
 
 ```kotlin
-import io.github.xaque8787.iroh.*
+import io.github.xaque8787.kausway.*
 
 // In your application's coroutine scope; keep the client with your playback owner.
-val client = IrohClient.initialize(applicationContext)
-// Defaults to noBackupFilesDir/iroh-client. Or supply a dedicated private directory:
-// IrohClient.initialize(applicationContext, IrohConfig(
+val client = KauswayClient.initialize(applicationContext)
+// Defaults to noBackupFilesDir/kausway-client. Or supply a dedicated private directory:
+// KauswayClient.initialize(applicationContext, KauswayConfig(
 //     storageDirectory = File(applicationContext.noBackupFilesDir, "transport"),
 //     deviceName = "Living room TV"
 // ))
-client.pair(invitationFromUser)  // existing jellyfin-iroh://invite/... link
+client.pair(invitationFromUser)  // existing kausway://invite/... link
 val connection = client.startProxy()
 val baseUrl = connection.proxyUrl // includes a trailing slash and secret URL prefix
 ```
@@ -69,7 +69,7 @@ stops a running proxy before changing pairing. A failed pairing does not erase a
 previous saved host. If the host accepted pairing but writing local storage fails,
 the invitation may have been consumed: fix storage and obtain a fresh invitation.
 
-Errors are `IrohException` with a typed `IrohErrorCode` and optional `serverCode`.
+Errors are `KauswayException` with a typed `KauswayErrorCode` and optional `serverCode`.
 Malformed local links produce INVALID_INVITATION. Server refusals produce
 AUTHORIZATION_DENIED, preserving such codes as `pairing_token_invalid`,
 `pairing_rate_limited` and `not_authorized`. **Protocol v1 does not distinguish an
@@ -119,7 +119,7 @@ the library does not globally enable cleartext traffic:
 Reference it from `<application android:networkSecurityConfig="@xml/network_security_config">`.
 Merge this with your existing application rules, preserving rules for other services.
 The embedded Android TLS verifier may also retrieve certificate revocation lists
-over HTTP. The SDK packages an optional `@xml/iroh_network_security_config` template
+over HTTP. The SDK packages an optional `@xml/kausway_network_security_config` template
 containing upstream's specific CRL domain allowlist plus 127.0.0.1. You may opt into
 that template or merge the relevant domains into your own rules; the SDK does not
 set it in your application manifest automatically.
@@ -233,18 +233,18 @@ cargo install cargo-ndk --version 4.1.2 --locked
 export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.2.12479018"
 bash scripts/android/build-aar.sh
 cd android
-./gradlew :sample:assembleDebug :iroh-client:assembleDebugAndroidTest
+./gradlew :sample:assembleDebug :kausway-client:assembleDebugAndroidTest
 ```
 
-Outputs: `dist/iroh-client-android-0.4.0.aar`, POM and checksum; native libraries
-remain in `android/iroh-client/src/main/jniLibs/<abi>/libiroh_client.so`. ELF
+Outputs: `dist/kausway-client-android-0.4.0.aar`, POM and checksum; native libraries
+remain in `android/kausway-client/src/main/jniLibs/<abi>/libkausway_client.so`. ELF
 architecture, JNI export and 16 KiB load alignment are checked before packaging;
 AAR contents are checked afterward. Do not distribute an AAR built before all ABI
-checks pass. Release versions come from `iroh/Cargo.toml`; the Android adapter inherits that
+checks pass. Release versions come from `rust/Cargo.toml`; the Android adapter inherits that
 version, and Gradle, build scripts and workflow artifact names read it. Synchronize
 the plugin version and Cargo.lock, then run `scripts/ci/check-version.sh`.
 
-Run native validation from `iroh`: `cargo test --workspace --locked` and
+Run native validation from `rust`: `cargo test --workspace --locked` and
 `cargo clippy --workspace --all-targets --locked -- -D warnings`. Run the existing
 CLI e2e script too. With a booted Android emulator, run
 `bash scripts/android/emulator-e2e.sh` from the repository root. It starts a real

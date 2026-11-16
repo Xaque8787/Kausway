@@ -1,11 +1,11 @@
 # Transport Protocol v1 (client to host)
 
-Status: draft, implemented in `iroh/crates/iroh-transport`. Message shapes are locked by the wire-format tests in `protocol.rs`. Host session logic is in `host.rs`, and the reference client in `client.rs`.
+Status: draft, implemented in `rust/crates/kausway-transport`. Message shapes are locked by the wire-format tests in `protocol.rs`. Host session logic is in `host.rs`, and the reference client in `client.rs`.
 
 ## Connection
 
 - Transport: an Iroh QUIC connection to the host's endpoint id.
-- ALPN: `jellyfin-iroh/1`. A connection that negotiates any other ALPN is not served.
+- ALPN: `kausway/1`. A connection that negotiates any other ALPN is not served.
 - Peer identity: the client's Iroh endpoint id, authenticated by Iroh's TLS handshake, is the device credential. No bearer token is sent after pairing.
 
 ## Framing
@@ -51,7 +51,7 @@ The handshake must complete within 10 seconds. Every 2 seconds the host re-check
 ## Invitation links
 
 ```
-jellyfin-iroh://invite/<base64url without padding of {"v":1,"addr":<iroh EndpointAddr>,"token":"<pairing token>"}>
+kausway://invite/<base64url without padding of {"v":1,"addr":<iroh EndpointAddr>,"token":"<pairing token>"}>
 ```
 
 `addr` is the host's full Iroh address: endpoint id, relay URL, and direct IP addresses as last published by the running host. A client can therefore dial without any lookup service. Links are capped at 8 KiB. A `v` other than 1 is rejected. The token works once and expires (default 1 hour, 60 seconds to 24 hours).
@@ -125,4 +125,4 @@ WebSocket support is optional and negotiated, so older clients and hosts keep wo
 
 ## Versioning
 
-`protocol` in HELLO and AUTH_REQUEST, and the `/1` ALPN suffix, identify the version. An incompatible change gets a new ALPN (`jellyfin-iroh/2`). A host may serve several ALPNs during a transition. Additive optional fields are allowed within v1, and receivers ignore unknown fields.
+`protocol` in HELLO and AUTH_REQUEST, and the `/1` ALPN suffix, identify the version. An incompatible change gets a new ALPN (`kausway/2`). A host may serve several ALPNs during a transition. Additive optional fields are allowed within v1, and receivers ignore unknown fields.

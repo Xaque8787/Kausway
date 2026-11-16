@@ -17,11 +17,15 @@ vitest.config.cts.timestamp-*.mjs
 android/.gradle/
 android/**/build/
 android/local.properties
-android/iroh-client/src/main/jniLibs/
-iroh/target/
+android/kausway-client/src/main/jniLibs/
+rust/target/
 dist/
-android/iroh-client/libs/
-android/iroh-client/src/main/res/xml/iroh_network_security_config.xml
+android/kausway-client/libs/
+android/kausway-client/src/main/res/xml/kausway_network_security_config.xml
 
 # Python fixture-test caches
 __pycache__/
+
+# Jellyfin plugin build outputs
+jellyfin-plugin/**/bin/
+jellyfin-plugin/**/obj/

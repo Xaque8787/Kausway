@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Kausway Remote Access</title>
+</head>
+<body>
+    <div id="KauswayConfigPage" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-select">
+        <style>
+            #KauswayConfigPage .kausway-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(13em, 1fr)); gap: 1em; margin: 1em 0 2em; }
+            #KauswayConfigPage .kausway-card { padding: 1em; border-radius: 0.5em; background: rgba(127, 127, 127, 0.12); transition: background 0.2s ease; }
+            #KauswayConfigPage .kausway-card:hover { background: rgba(127, 127, 127, 0.18); }
+            #KauswayConfigPage .kausway-card-label { font-size: 0.85em; opacity: 0.75; margin-bottom: 0.4em; }
+            #KauswayConfigPage .kausway-card-value { font-size: 1.15em; font-weight: 600; word-break: break-all; line-height: 1.3; }
+            #KauswayConfigPage .kausway-notice { padding: 0.8em 1em; border-radius: 0.5em; margin: 1em 0; line-height: 1.5; }
+            #KauswayConfigPage .kausway-notice-warn { background: rgba(230, 160, 20, 0.18); border-left: 4px solid #e6a014; }
+            #KauswayConfigPage .kausway-notice-error { background: rgba(220, 60, 50, 0.18); border-left: 4px solid #dc3c32; }
+            #KauswayConfigPage .kausway-table { width: 100%; border-collapse: collapse; margin-top: 0.5em; }
+            #KauswayConfigPage .kausway-table th, #KauswayConfigPage .kausway-table td { text-align: left; padding: 0.6em 0.5em; border-bottom: 1px solid rgba(127, 127, 127, 0.25); vertical-align: middle; }
+            #KauswayConfigPage .kausway-table th { font-weight: 600; font-size: 0.85em; opacity: 0.8; }
+            #KauswayConfigPage .kausway-table tr { transition: background 0.15s ease; }
+            #KauswayConfigPage .kausway-table tbody tr:hover { background: rgba(127, 127, 127, 0.1); }
+            #KauswayConfigPage .kausway-mono { font-family: monospace; font-size: 0.9em; }
+            #KauswayConfigPage .kausway-pill { display: inline-block; padding: 0.15em 0.6em; border-radius: 1em; font-size: 0.85em; font-weight: 600; }
+            #KauswayConfigPage .kausway-pill-direct { background: rgba(40, 170, 90, 0.25); }
+            #KauswayConfigPage .kausway-pill-relay { background: rgba(40, 120, 220, 0.25); }
+            #KauswayConfigPage .kausway-pill-unknown, #KauswayConfigPage .kausway-pill-revoked { background: rgba(127, 127, 127, 0.25); }
+            #KauswayConfigPage .kausway-pill-active { background: rgba(40, 170, 90, 0.25); }
+            #KauswayConfigPage .kausway-empty { opacity: 0.7; padding: 0.8em 0; }
+            #KauswayConfigPage .kausway-row { display: flex; flex-wrap: wrap; gap: 1em; align-items: flex-end; }
+            #KauswayConfigPage .kausway-row > .inputContainer, #KauswayConfigPage .kausway-row > .selectContainer { flex: 1 1 14em; margin-bottom: 0; }
+            #KauswayConfigPage textarea.kausway-link { width: 100%; box-sizing: border-box; min-height: 5em; font-family: monospace; font-size: 0.85em; padding: 0.6em; border-radius: 0.3em; resize: vertical; }
+            #KauswayConfigPage .kausway-section { margin-bottom: 2.5em; }
+            #KauswayConfigPage .kausway-hidden { display: none; }
+            #KauswayConfigPage .kausway-scroll { overflow-x: auto; }
+        </style>
+        <div data-role="content">
+            <div class="content-primary">
+                <h2 class="sectionTitle">Kausway Remote Access</h2>
+                <p>Private remote access to this server over Kausway peer-to-peer connections. Settings here are applied by kausway-host, which runs separately from Jellyfin.</p>
+
+                <div id="kauswayError" class="kausway-notice kausway-notice-error kausway-hidden" role="alert"></div>
+                <div id="kauswayRestart" class="kausway-notice kausway-notice-warn kausway-hidden">
+                    The saved policy needs an kausway-host restart before it takes effect. In Docker, restart the container.
+                </div>
+
+                <div class="kausway-grid">
+                    <div class="kausway-card"><div class="kausway-card-label">Policy</div><div class="kausway-card-value" id="kauswayPolicyValue">-</div></div>
+                    <div class="kausway-card"><div class="kausway-card-label">WebSockets</div><div class="kausway-card-value" id="kauswayWebSocketValue">-</div></div>
+                    <div class="kausway-card"><div class="kausway-card-label">Relay</div><div class="kausway-card-value" id="kauswayRelayValue">-</div></div>
+                    <div class="kausway-card"><div class="kausway-card-label">Connected now</div><div class="kausway-card-value" id="kauswaySessionsValue">-</div></div>
+                    <div class="kausway-card"><div class="kausway-card-label">Paired devices</div><div class="kausway-card-value" id="kauswayDevicesValue">-</div></div>
+                    <div class="kausway-card"><div class="kausway-card-label">Host uptime</div><div class="kausway-card-value" id="kauswayUptimeValue">-</div></div>
+                </div>
+
+                <div class="kausway-section">
+                    <h3 class="sectionTitle">Invite a device</h3>
+                    <form id="kauswayInviteForm">
+                        <div class="kausway-row">
+                            <div class="inputContainer">
+                                <label class="inputLabel inputLabelUnfocused" for="kauswayInviteLabel">Label</label>
+                                <input id="kauswayInviteLabel" type="text" is="emby-input" maxlength="64" required placeholder="Living room TV" />
+                            </div>
+                            <div class="selectContainer">
+                                <label class="selectLabel" for="kauswayInviteTtl">Valid for</label>
+                                <select id="kauswayInviteTtl" is="emby-select" class="emby-select-withcolor emby-select">
+                                    <option value="900">15 minutes</option>
+                                    <option value="3600">1 hour</option>
+                                    <option value="86400">24 hours</option>
+                                </select>
+                            </div>
+                            <div>
+                                <button is="emby-button" type="submit" class="raised button-submit emby-button"><span>Create link</span></button>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="kauswayInviteResult" class="kausway-hidden">
+                        <p>Open this link on the device you are pairing. It works once and expires <span id="kauswayInviteExpiry"></span>.</p>
+                        <textarea id="kauswayInviteLink" class="kausway-link emby-input" readonly></textarea>
+                        <button is="emby-button" type="button" id="kauswayCopyLink" class="raised emby-button"><span>Copy link</span></button>
+                    </div>
+                    <div class="kausway-scroll">
+                        <table class="kausway-table" id="kauswayInvitationsTable">
+                            <thead><tr><th>Label</th><th>Expires</th><th></th></tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                    <div class="kausway-empty kausway-hidden" id="kauswayInvitationsEmpty">No pending invitations.</div>
+                </div>
+
+                <div class="kausway-section">
+                    <h3 class="sectionTitle">Connected sessions</h3>
+                    <div class="kausway-scroll">
+                        <table class="kausway-table" id="kauswaySessionsTable">
+                            <thead><tr><th>Device</th><th>Path</th><th>Round trip</th><th>Remote address</th><th>Requests</th><th>Sent</th></tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                    <div class="kausway-empty kausway-hidden" id="kauswaySessionsEmpty">No devices are connected.</div>
+                </div>
+
+                <div class="kausway-section">
+                    <h3 class="sectionTitle">Paired devices</h3>
+                    <div class="kausway-scroll">
+                        <table class="kausway-table" id="kauswayDevicesTable">
+                            <thead><tr><th>Name</th><th>Endpoint</th><th>Paired</th><th>State</th><th></th></tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                    <div class="kausway-empty kausway-hidden" id="kauswayDevicesEmpty">No devices have been paired yet.</div>
+                </div>
+
+                <div class="kausway-section">
+                    <h3 class="sectionTitle">Transport policy</h3>
+                    <form id="kauswayPolicyForm">
+                        <div class="kausway-row">
+                            <div class="selectContainer">
+                                <label class="selectLabel" for="kauswayPolicy">Policy</label>
+                                <select id="kauswayPolicy" is="emby-select" class="emby-select-withcolor emby-select">
+                                    <option value="auto">Auto: direct when possible, relay fallback</option>
+                                    <option value="relay_only">Relay only</option>
+                                    <option value="p2p_only">P2P only</option>
+                                </select>
+                            </div>
+                            <div>
+                                <button is="emby-button" type="submit" class="raised button-submit emby-button"><span>Save policy</span></button>
+                            </div>
+                        </div>
+                    </form>
+                    <div class="fieldDescription" id="kauswayEnforcement"></div>
+                    <div class="fieldDescription">Relay only and P2P only are best effort in this version. See docs/transport-policies.md for what is and is not guaranteed.</div>
+                </div>
+
+                <div class="kausway-section">
+                    <h3 class="sectionTitle">WebSockets</h3>
+                    <form id="kauswayWebSocketForm">
+                        <div class="kausway-row">
+                            <div class="selectContainer">
+                                <label class="selectLabel" for="kauswayWebSocketEnabled">WebSockets</label>
+                                <select id="kauswayWebSocketEnabled" is="emby-select" class="emby-select-withcolor emby-select">
+                                    <option value="on">On: forward WebSocket connections</option>
+                                    <option value="off">Off: refuse them, as in earlier versions</option>
+                                </select>
+                            </div>
+                            <div class="selectContainer">
+                                <label class="selectLabel" for="kauswayWebSocketOrigin">Origin header</label>
+                                <select id="kauswayWebSocketOrigin" is="emby-select" class="emby-select-withcolor emby-select">
+                                    <option value="rewrite">Rewrite to the server's own address</option>
+                                    <option value="pass_through">Pass through unchanged</option>
+                                </select>
+                            </div>
+                            <div>
+                                <button is="emby-button" type="submit" class="raised button-submit emby-button"><span>Save WebSockets</span></button>
+                            </div>
+                        </div>
+                    </form>
+                    <div class="fieldDescription">Changes apply within a few seconds; turning WebSockets off closes open ones. Normal requests are not affected. When KAUSWAY_WEBSOCKETS or KAUSWAY_WEBSOCKET_ORIGIN is set for kausway-host, that value is applied again each time the host starts.</div>
+                </div>
+
+                <div class="kausway-section">
+                    <h3 class="sectionTitle">Host connection</h3>
+                    <form id="kauswaySettingsForm">
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="kauswayControlUrl">Control API URL</label>
+                            <input id="kauswayControlUrl" type="url" is="emby-input" />
+                            <div class="fieldDescription">Ignored when JELLYFIN_KAUSWAY_CONTROL_URL is set, as it is in the Docker image.</div>
+                        </div>
+                        <div class="inputContainer">
+                            <label class="inputLabel inputLabelUnfocused" for="kauswayTokenFile">Token file</label>
+                            <input id="kauswayTokenFile" type="text" is="emby-input" />
+                            <div class="fieldDescription">Ignored when JELLYFIN_KAUSWAY_CONTROL_TOKEN or JELLYFIN_KAUSWAY_CONTROL_TOKEN_FILE is set.</div>
+                        </div>
+                        <button is="emby-button" type="submit" class="raised button-submit block emby-button"><span>Save</span></button>
+                    </form>
+                </div>
+            </div>
+        </div>
+        <script type="text/javascript">
+            (function () {
+                var pluginId = '7c7a2311-48af-55e1-bc29-c41da361c57f';
+                var page = document.querySelector('#KauswayConfigPage');
+                var refreshTimer = null;
+
+                function $(selector) { return page.querySelector(selector); }
+
+                function show(element, visible) { element.classList.toggle('kausway-hidden', !visible); }
+
+                function showError(message) {
+                    var box = $('#kauswayError');
+                    box.textContent = message || '';
+                    show(box, !!message);
+                }
+
+                function request(method, path, body) {
+                    var headers = { 'Authorization': 'MediaBrowser Token="' + ApiClient.accessToken() + '"' };
+                    if (body !== undefined) { headers['Content-Type'] = 'application/json'; }
+                    return fetch(ApiClient.getUrl('JellyfinKausway/' + path), {
+                        method: method,
+                        headers: headers,
+                        body: body === undefined ? undefined : JSON.stringify(body)
+                    }).then(function (response) {
+                        if (response.status === 204) { return null; }
+                        return response.text().then(function (text) {
+                            var data = null;
+                            try { data = text ? JSON.parse(text) : null; } catch (e) { data = null; }
+                            if (!response.ok) {
+                                var message = data && data.error && data.error.message ? data.error.message : 'Request failed with status ' + response.status + '.';
+                                throw new Error(message);
+                            }
+                            return data;
+                        });
+                    });
+                }
+
+                function cell(row, text, className) {
+                    var td = document.createElement('td');
+                    td.textContent = text;
+                    if (className) { td.className = className; }
+                    row.appendChild(td);
+                    return td;
+                }
+
+                function pill(row, text, kind) {
+                    var td = document.createElement('td');
+                    var span = document.createElement('span');
+                    span.className = 'kausway-pill kausway-pill-' + kind;
+                    span.textContent = text;
+                    td.appendChild(span);
+                    row.appendChild(td);
+                }
+
+                function actionButton(row, label, onClick) {
+                    var td = document.createElement('td');
+                    var button = document.createElement('button');
+                    button.setAttribute('is', 'emby-button');
+                    button.type = 'button';
+                    button.className = 'emby-button';
+                    button.textContent = label;
+                    button.addEventListener('click', onClick);
+                    td.appendChild(button);
+                    row.appendChild(td);
+                }
+
+                function fillTable(tableSelector, emptySelector, items, buildRow) {
+                    var body = $(tableSelector + ' tbody');
+                    body.replaceChildren();
+                    items.forEach(function (item) {
+                        var row = document.createElement('tr');
+                        buildRow(row, item);
+                        body.appendChild(row);
+                    });
+                    show($(tableSelector), items.length > 0);
+                    show($(emptySelector), items.length === 0);
+                }
+
+                function when(secs) { return secs ? new Date(secs * 1000).toLocaleString() : '-'; }
+
+                function shortId(id) { return id.length > 16 ? id.slice(0, 8) + '...' + id.slice(-6) : id; }
+
+                function bytes(n) {
+                    var units = ['B', 'KB', 'MB', 'GB', 'TB'];
+                    var i = 0;
+                    while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
+                    return (i === 0 ? n : n.toFixed(1)) + ' ' + units[i];
+                }
+
+                function duration(secs) {
+                    var d = Math.floor(secs / 86400), h = Math.floor(secs % 86400 / 3600), m = Math.floor(secs % 3600 / 60);
+                    return d ? d + 'd ' + h + 'h' : h ? h + 'h ' + m + 'm' : m + 'm';
+                }
+
+                function renderPolicy(policy) {
+                    $('#kauswayPolicyValue').textContent = policy.configured;
+                    $('#kauswayPolicy').value = policy.configured;
+                    $('#kauswayEnforcement').textContent = 'Current enforcement: ' + policy.enforcement + '.';
+                    show($('#kauswayRestart'), policy.restart_required);
+                }
+
+                function renderWebSocket(settings) {
+                    if (!settings) {
+                        $('#kauswayWebSocketValue').textContent = 'Not supported by this host';
+                        return;
+                    }
+                    $('#kauswayWebSocketValue').textContent = settings.enabled ? 'On (' + settings.origin_header + ')' : 'Off';
+                    $('#kauswayWebSocketEnabled').value = settings.enabled ? 'on' : 'off';
+                    $('#kauswayWebSocketOrigin').value = settings.origin_header;
+                }
+
+                function loadStatus() {
+                    return request('GET', 'Status').then(function (status) {
+                        renderPolicy(status.policy);
+                        renderWebSocket(status.websocket);
+                        var relay = status.relay.mode === 'disabled' ? 'Disabled' : (status.relay_connected ? 'Connected' : 'Not connected');
+                        if (status.relay.mode === 'custom') { relay += ' (custom)'; }
+                        $('#kauswayRelayValue').textContent = relay;
+                        $('#kauswaySessionsValue').textContent = String(status.sessions);
+                        $('#kauswayDevicesValue').textContent = String(status.devices);
+                        $('#kauswayUptimeValue').textContent = duration(status.uptime_secs);
+                    });
+                }
+
+                function loadSessions() {
+                    return request('GET', 'Sessions').then(function (data) {
+                        fillTable('#kauswaySessionsTable', '#kauswaySessionsEmpty', data.sessions, function (row, s) {
+                            cell(row, s.name);
+                            pill(row, s.path.kind, s.path.kind);
+                            cell(row, s.path.rtt_ms === null || s.path.rtt_ms === undefined ? '-' : s.path.rtt_ms.toFixed(1) + ' ms');
+                            cell(row, s.path.remote_addr || '-', 'kausway-mono');
+                            cell(row, s.requests + (s.active_requests ? ' (' + s.active_requests + ' active)' : '') + (s.active_websockets ? ', ' + s.active_websockets + ' WebSocket' + (s.active_websockets === 1 ? '' : 's') : ''));
+                            cell(row, bytes(s.bytes_sent));
+                        });
+                        $('#kauswaySessionsValue').textContent = String(data.sessions.length);
+                    });
+                }
+
+                function loadDevices() {
+                    return request('GET', 'Devices').then(function (data) {
+                        fillTable('#kauswayDevicesTable', '#kauswayDevicesEmpty', data.devices, function (row, d) {
+                            cell(row, d.name);
+                            cell(row, shortId(d.endpoint_id), 'kausway-mono').title = d.endpoint_id;
+                            cell(row, when(d.paired_at));
+                            if (d.revoked_at) {
+                                pill(row, 'revoked', 'revoked');
+                                cell(row, '');
+                            } else {
+                                pill(row, d.connected ? 'connected' : 'active', 'active');
+                                actionButton(row, 'Revoke', function () {
+                                    if (!window.confirm('Revoke "' + d.name + '"? It will be disconnected and must be invited again to reconnect.')) { return; }
+                                    request('DELETE', 'Devices/' + encodeURIComponent(d.endpoint_id)).then(refreshAll).catch(fail);
+                                });
+                            }
+                        });
+                    });
+                }
+
+                function loadInvitations() {
+                    return request('GET', 'Invitations').then(function (data) {
+                        fillTable('#kauswayInvitationsTable', '#kauswayInvitationsEmpty', data.invitations, function (row, inv) {
+                            cell(row, inv.label);
+                            cell(row, when(inv.expires_at));
+                            actionButton(row, 'Cancel', function () {
+                                request('DELETE', 'Invitations/' + encodeURIComponent(inv.id)).then(function () {
+                                    show($('#kauswayInviteResult'), false);
+                                    return loadInvitations();
+                                }).catch(fail);
+                            });
+                        });
+                    });
+                }
+
+                function fail(error) { showError(error && error.message ? error.message : String(error)); }
+
+                function refreshAll() {
+                    return Promise.all([loadStatus(), loadSessions(), loadDevices(), loadInvitations()])
+                        .then(function () { showError(null); })
+                        .catch(fail);
+                }
+
+                page.addEventListener('pageshow', function () {
+                    Dashboard.showLoadingMsg();
+                    ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+                        $('#kauswayControlUrl').value = config.ControlUrl || '';
+                        $('#kauswayTokenFile').value = config.TokenFile || '';
+                    });
+                    refreshAll().then(function () { Dashboard.hideLoadingMsg(); });
+                    clearInterval(refreshTimer);
+                    refreshTimer = setInterval(function () {
+                        Promise.all([loadStatus(), loadSessions()]).catch(fail);
+                    }, 5000);
+                });
+
+                page.addEventListener('pagehide', function () {
+                    clearInterval(refreshTimer);
+                    refreshTimer = null;
+                });
+
+                $('#kauswayInviteForm').addEventListener('submit', function (e) {
+                    e.preventDefault();
+                    var label = $('#kauswayInviteLabel').value.trim();
+                    request('POST', 'Invitations', { label: label, ttl_secs: parseInt($('#kauswayInviteTtl').value, 10) })
+                        .then(function (inv) {
+                            $('#kauswayInviteLink').value = inv.link;
+                            $('#kauswayInviteExpiry').textContent = when(inv.expires_at);
+                            show($('#kauswayInviteResult'), true);
+                            $('#kauswayInviteLabel').value = '';
+                            showError(null);
+                            return loadInvitations();
+                        })
+                        .catch(fail);
+                    return false;
+                });
+
+                $('#kauswayCopyLink').addEventListener('click', function () {
+                    var link = $('#kauswayInviteLink');
+                    var done = function () { Dashboard.alert('Invitation link copied.'); };
+                    if (navigator.clipboard && window.isSecureContext) {
+                        navigator.clipboard.writeText(link.value).then(done).catch(fail);
+                    } else {
+                        link.select();
+                        document.execCommand('copy');
+                        done();
+                    }
+                });
+
+                $('#kauswayPolicyForm').addEventListener('submit', function (e) {
+                    e.preventDefault();
+                    request('PUT', 'Policy', { policy: $('#kauswayPolicy').value })
+                        .then(function (policy) { renderPolicy(policy); showError(null); })
+                        .catch(fail);
+                    return false;
+                });
+
+                $('#kauswayWebSocketForm').addEventListener('submit', function (e) {
+                    e.preventDefault();
+                    request('PUT', 'WebSocket', {
+                        enabled: $('#kauswayWebSocketEnabled').value === 'on',
+                        origin_header: $('#kauswayWebSocketOrigin').value
+                    })
+                        .then(function (settings) { renderWebSocket(settings); showError(null); })
+                        .catch(fail);
+                    return false;
+                });
+
+                $('#kauswaySettingsForm').addEventListener('submit', function (e) {
+                    e.preventDefault();
+                    Dashboard.showLoadingMsg();
+                    ApiClient.getPluginConfiguration(pluginId).then(function (config) {
+                        config.ControlUrl = $('#kauswayControlUrl').value.trim();
+                        config.TokenFile = $('#kauswayTokenFile').value.trim();
+                        return ApiClient.updatePluginConfiguration(pluginId, config);
+                    }).then(function (result) {
+                        Dashboard.processPluginConfigurationUpdateResult(result);
+                        return refreshAll();
+                    });
+                    return false;
+                });
+            })();
+        </script>
+    </div>
+</body>
+</html>

@@ -1,16 +1,16 @@
 #!/bin/bash
 # Container entrypoint: installs the bundled plugin into Jellyfin's persistent plugin directory,
-# then supervises iroh-host and Jellyfin as independent processes. iroh-host is restarted with
+# then supervises kausway-host and Jellyfin as independent processes. kausway-host is restarted with
 # backoff if it exits; the container stops when Jellyfin stops.
 set -euo pipefail
 
-log() { echo "[jellyfin-iroh] $*" >&2; }
+log() { echo "[kausway] $*" >&2; }
 
 install_plugins() {
   local plugins_dir="${JELLYFIN_DATA_DIR:-/config}/plugins"
   mkdir -p "$plugins_dir"
   local bundled name
-  for bundled in /opt/jellyfin-iroh/plugins/*/; do
+  for bundled in /opt/kausway/plugins/*/; do
     name=$(basename "$bundled")
     # Older versions of this plugin would otherwise load alongside the new one.
     find "$plugins_dir" -mindepth 1 -maxdepth 1 -type d -name "${name%%_*}_*" ! -name "$name" -exec rm -rf {} +
@@ -22,18 +22,18 @@ install_plugins() {
   done
 }
 
-supervise_iroh() {
+supervise_kausway() {
   local child=0 delay=1 started status
   trap 'if [ "$child" -ne 0 ]; then kill -TERM "$child" 2>/dev/null || true; wait "$child" 2>/dev/null || true; fi; exit 0' TERM INT
   while true; do
     started=$(date +%s)
-    /usr/local/bin/iroh-host serve &
+    /usr/local/bin/kausway-host serve &
     child=$!
     status=0
     wait "$child" || status=$?
     child=0
     if [ $(( $(date +%s) - started )) -ge 60 ]; then delay=1; fi
-    log "iroh-host exited with status $status; restarting in ${delay}s"
+    log "kausway-host exited with status $status; restarting in ${delay}s"
     # Backgrounded so a stop signal interrupts the wait instead of waiting out the sleep.
     sleep "$delay" &
     wait $! || true
@@ -42,16 +42,16 @@ supervise_iroh() {
 }
 
 install_plugins
-mkdir -p "${IROH_DATA_DIR:-/iroh-data}"
+mkdir -p "${KAUSWAY_DATA_DIR:-/kausway-data}"
 
-supervise_iroh &
-iroh_supervisor=$!
+supervise_kausway &
+kausway_supervisor=$!
 /jellyfin/jellyfin "$@" &
 jellyfin=$!
 
 stop() {
   log "stopping"
-  kill -TERM "$jellyfin" "$iroh_supervisor" 2>/dev/null || true
+  kill -TERM "$jellyfin" "$kausway_supervisor" 2>/dev/null || true
 }
 trap stop TERM INT
 
@@ -62,6 +62,6 @@ while kill -0 "$jellyfin" 2>/dev/null; do
   wait "$jellyfin" || status=$?
   jellyfin_status=$status
 done
-kill -TERM "$iroh_supervisor" 2>/dev/null || true
-wait "$iroh_supervisor" 2>/dev/null || true
+kill -TERM "$kausway_supervisor" 2>/dev/null || true
+wait "$kausway_supervisor" 2>/dev/null || true
 exit "$jellyfin_status"

@@ -1,15 +1,15 @@
 # Android SDK audit and implementation plan
 
-The original `iroh-test-client` owns CLI parsing/output, endpoint construction, private
+The original `kausway-test-client` owns CLI parsing/output, endpoint construction, private
 `client.key` / `host.json` persistence, pairing, connection reuse, and a Hyper HTTP/1
-proxy with streaming responses and WebSocket upgrades. `iroh-transport` already owns
+proxy with streaming responses and WebSocket upgrades. `kausway-transport` already owns
 protocol v1, authorization, policy, path reporting, request streams and cancellation.
 The host, invitation format, protocol and Jellyfin plugin need no changes.
 
-1. Extract endpoint/storage/session/proxy ownership to `iroh-client`; keep CLI flags,
+1. Extract endpoint/storage/session/proxy ownership to `kausway-client`; keep CLI flags,
    stdout/stderr formatting, fetch-to-file and terminal signals in the CLI. Validate
    existing workspace tests and the existing CLI end-to-end script before Android.
-2. Add `iroh-client-android` cdylib with a small JNI adapter. Kotlin exposes typed
+2. Add `kausway-client-android` cdylib with a small JNI adapter. Kotlin exposes typed
    suspend APIs on Dispatchers.IO; native tokens never reach the public API. JNI
    avoids UniFFI's Kotlin/JNA runtime distribution dependency for this standalone
    AAR. UniFFI remains a viable future interface over the same core.
@@ -20,12 +20,12 @@ The host, invitation format, protocol and Jellyfin plugin need no changes.
    stripped before forwarding. Reject requests outside that namespace, including
    upgrades. CLI keeps its existing unprefixed URL behavior. No wildcard listener.
 5. Package arm64-v8a, armeabi-v7a and x86_64, API 24+, namespace
-   `io.github.xaque8787.iroh`, SDK version 0.4.0, aligned with the coordinated host/plugin release.
+   `io.github.xaque8787.kausway`, SDK version 0.4.0, aligned with the coordinated host/plugin release.
 6. Build AAR, independent sample, native lifecycle tests and CI; distinguish native
    Linux tests, Android compilation and actual emulator/device behavior.
 
-Compatibility constraints: keep existing client identity filenames and invitation
-links; retain authorization/revocation and best-effort host policies. Identity is a
+Kausway uses its own invitation scheme and storage paths. Retain
+authorization/revocation and best-effort host policies. Identity is a
 32-byte exportable Ed25519 seed; Android Keystore signing keys cannot replace it.
 Use private, non-backed-up app storage and owner-only files. Forgetting pairing
 retains identity and is not server-side revocation. Pairing rejection codes are

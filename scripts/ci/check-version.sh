@@ -8,9 +8,9 @@ root=$(cd "$(dirname "$0")/../.." && pwd)
 tag=${1:-}
 fail=0
 
-version=$(sed -n 's/^version = "\(.*\)"/\1/p' "$root/iroh/Cargo.toml" | head -n 1)
+version=$(sed -n 's/^version = "\(.*\)"/\1/p' "$root/rust/Cargo.toml" | head -n 1)
 if ! [[ $version =~ ^([0-9]+\.[0-9]+\.[0-9]+)(-[0-9A-Za-z.-]+)?$ ]]; then
-  echo "iroh/Cargo.toml: version '$version' is not MAJOR.MINOR.PATCH[-PRERELEASE]" >&2
+  echo "rust/Cargo.toml: version '$version' is not MAJOR.MINOR.PATCH[-PRERELEASE]" >&2
   exit 1
 fi
 # Jellyfin plugin versions are four numbers and cannot carry a pre-release suffix.
@@ -24,17 +24,17 @@ expect() {
   fi
 }
 
-for crate in iroh-host iroh-transport iroh-client iroh-client-android; do
-  locked=$(awk -v n="$crate" '$0 == "name = \"" n "\"" { getline; gsub(/version = |"/, ""); print }' "$root/iroh/Cargo.lock")
-  expect "iroh/Cargo.lock ($crate)" "$locked" "$version"
+for crate in kausway-host kausway-transport kausway-client kausway-client-android; do
+  locked=$(awk -v n="$crate" '$0 == "name = \"" n "\"" { getline; gsub(/version = |"/, ""); print }' "$root/rust/Cargo.lock")
+  expect "rust/Cargo.lock ($crate)" "$locked" "$version"
 done
 
 expect jellyfin-plugin/meta.json \
   "$(sed -n 's/^ *"version": *"\([^"]*\)".*/\1/p' "$root/jellyfin-plugin/meta.json")" "$plugin"
-csproj="$root/jellyfin-plugin/Jellyfin.Plugin.Iroh/Jellyfin.Plugin.Iroh.csproj"
-expect "Jellyfin.Plugin.Iroh.csproj (AssemblyVersion)" \
+csproj="$root/jellyfin-plugin/Jellyfin.Plugin.Kausway/Jellyfin.Plugin.Kausway.csproj"
+expect "Jellyfin.Plugin.Kausway.csproj (AssemblyVersion)" \
   "$(sed -n 's/.*<AssemblyVersion>\(.*\)<\/AssemblyVersion>.*/\1/p' "$csproj")" "$plugin"
-expect "Jellyfin.Plugin.Iroh.csproj (FileVersion)" \
+expect "Jellyfin.Plugin.Kausway.csproj (FileVersion)" \
   "$(sed -n 's/.*<FileVersion>\(.*\)<\/FileVersion>.*/\1/p' "$csproj")" "$plugin"
 
 if [ -n "$tag" ]; then

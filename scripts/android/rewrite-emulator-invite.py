@@ -4,13 +4,13 @@ import ipaddress
 import json
 import sys
 
-PREFIX = 'jellyfin-iroh://invite/'
+PREFIX = 'kausway://invite/'
 
 
 def emulator_invitation(link):
     link = link.strip()
     if not link.startswith(PREFIX):
-        raise ValueError('Not an Iroh invitation')
+        raise ValueError('Not a Kausway invitation')
     payload = link[len(PREFIX):]
     doc = json.loads(base64.urlsafe_b64decode(payload + '=' * (-len(payload) % 4)))
     addresses = doc['addr']['addrs']

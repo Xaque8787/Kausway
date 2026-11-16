@@ -8,8 +8,8 @@ set -euo pipefail
 bin=$(cd "$1" && pwd)
 work=$(mktemp -d)
 host_log="$work/host.log"
-export IROH_RELAY_URL=none
-export RUST_LOG=info,iroh=warn,noq=warn,iroh_host=info,iroh_transport=info
+export KAUSWAY_RELAY_URL=none
+export RUST_LOG=info,iroh=warn,noq=warn,kausway_host=info,kausway_transport=info
 pids=()
 cleanup() {
   for pid in "${pids[@]}"; do kill "$pid" 2>/dev/null || true; done
@@ -24,9 +24,9 @@ python3 "$(dirname "$0")/range-origin.py" 18096 "$work/www" &
 pids+=($!)
 
 host=(--data-dir "$work/host")
-client=("$bin/iroh-test-client" --data-dir "$work/client" --name ci-client)
+client=("$bin/kausway-test-client" --data-dir "$work/client" --name ci-client)
 
-"$bin/iroh-host" serve "${host[@]}" --origin http://127.0.0.1:18096 > "$host_log" 2>&1 &
+"$bin/kausway-host" serve "${host[@]}" --origin http://127.0.0.1:18096 > "$host_log" 2>&1 &
 host_pid=$!
 pids+=("$host_pid")
 
@@ -37,14 +37,14 @@ done
 test -s "$work/host/endpoint-addr.json"
 test "$(stat -c %a "$work/host/endpoint-addr.json")" = "600"
 
-link=$("$bin/iroh-host" invite "${host[@]}" --label "CI client")
-case "$link" in jellyfin-iroh://invite/*) ;; *) echo "unexpected link: $link"; exit 1 ;; esac
+link=$("$bin/kausway-host" invite "${host[@]}" --label "CI client")
+case "$link" in kausway://invite/*) ;; *) echo "unexpected link: $link"; exit 1 ;; esac
 
 "${client[@]}" pair "$link"
 test "$(stat -c %a "$work/client/host.json")" = "600"
 
 # A used invite must not pair a second device.
-if "$bin/iroh-test-client" --data-dir "$work/intruder" pair "$link"; then
+if "$bin/kausway-test-client" --data-dir "$work/intruder" pair "$link"; then
   echo "invite link was accepted twice" && exit 1
 fi
 
@@ -96,7 +96,7 @@ test "$(policy auto)" = "200"
 
 # An invitation made through the API pairs a second device, which the API then revokes.
 curl -sf "${auth[@]}" -X POST -H 'Content-Type: application/json' -d '{"label":"API phone","ttl_secs":600}' "$api/invitations" > "$work/invite.json"
-phone=("$bin/iroh-test-client" --data-dir "$work/phone" --name api-phone)
+phone=("$bin/kausway-test-client" --data-dir "$work/phone" --name api-phone)
 "${phone[@]}" pair "$(json 'd["link"]' < "$work/invite.json")"
 test "$(curl -sf "${auth[@]}" "$api/invitations" | json 'len(d["invitations"])')" = "0"
 phone_id=$(curl -sf "${auth[@]}" "$api/devices" | json '[x for x in d["devices"] if x["name"] == "api-phone"][0]["endpoint_id"]')
@@ -106,10 +106,10 @@ test "$(curl -s -o /dev/null -w '%{http_code}' "${auth[@]}" -X DELETE "$api/devi
 kill -INT "$proxy_pid"
 wait "$proxy_pid" || true
 
-device=$("$bin/iroh-host" devices "${host[@]}" | awk '$1 == "active" { print $2 }')
+device=$("$bin/kausway-host" devices "${host[@]}" | awk '$1 == "active" { print $2 }')
 test -n "$device"
-"$bin/iroh-host" revoke "${host[@]}" "$device"
-"$bin/iroh-host" devices "${host[@]}" | grep -q "^revoked  $device"
+"$bin/kausway-host" revoke "${host[@]}" "$device"
+"$bin/kausway-host" devices "${host[@]}" | grep -q "^revoked  $device"
 
 # The running host reloads state every 2 seconds.
 sleep 3

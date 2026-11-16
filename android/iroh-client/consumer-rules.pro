@@ -1,2 +1,0 @@
--keep class io.github.xaque8787.iroh.NativeBridge { *; }
--keep class org.rustls.platformverifier.** { *; }
