@@ -63,7 +63,7 @@ jobs:
         run: ./gradlew :sample:assembleDebug :kausway-client:assembleDebugAndroidTest
       - uses: actions/upload-artifact@v4
         with:
-          name: kausway-client-android-${{ steps.version.outputs.version }}
+          name: android-sdk-development-${{ steps.version.outputs.version }}
           path: |
             dist/kausway-client-android-${{ steps.version.outputs.version }}.*
             sdks/android/kausway-client/src/main/jniLibs/*/*.so
