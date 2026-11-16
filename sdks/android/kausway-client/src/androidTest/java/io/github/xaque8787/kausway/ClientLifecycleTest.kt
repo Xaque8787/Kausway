@@ -15,7 +15,9 @@ class ClientLifecycleTest {
     private suspend fun <T> stage(name: String, action: suspend () -> T): T = try {
         action()
     } catch (error: Exception) {
-        throw AssertionError("Android SDK stage failed: $name", error)
+        val detail = if (error is KauswayException) "${error.code}: ${error.message}"
+            else "${error.javaClass.simpleName}: ${error.message}"
+        throw AssertionError("Android SDK stage failed: $name ($detail)", error)
     }
 
     @Test fun nativeLifecycleAndStorage() = runBlocking {

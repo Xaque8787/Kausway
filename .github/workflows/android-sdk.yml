@@ -93,4 +93,7 @@ jobs:
         if: always()
         with:
           name: android-sdk-test-results
-          path: sdks/android/kausway-client/build/reports/androidTests/
+          path: |
+            sdks/android/kausway-client/build/reports/androidTests/
+            sdks/android/kausway-client/build/outputs/androidTest-results/
+            dist/android-emulator-diagnostics/

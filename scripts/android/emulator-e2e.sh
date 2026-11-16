@@ -4,9 +4,14 @@ set -euo pipefail
 root=$(cd "$(dirname "$0")/../.." && pwd)
 work=$(mktemp -d)
 pids=()
+diagnostics="$root/dist/android-emulator-diagnostics"
+mkdir -p "$diagnostics"
 cleanup() {
   for pid in "${pids[@]}"; do kill "$pid" 2>/dev/null || true; done
   # Host logs never contain invite tokens, but generated links are deliberately not printed.
+  for log in host origin; do
+    [ ! -f "$work/$log.log" ] || cp "$work/$log.log" "$diagnostics/$log.log"
+  done
   tail -n 100 "$work/host.log" || true
   rm -rf "$work"
 }
@@ -24,6 +29,13 @@ for _ in $(seq 1 100); do
   sleep 0.1
 done
 test -s "$work/host/endpoint-addr.json"
+# Record reachable-address hints without copying the invitation or token.
+python3 - "$work/host/endpoint-addr.json" <<'PYADDR' > "$diagnostics/host-routes.json"
+import json, sys
+with open(sys.argv[1]) as source:
+    address = json.load(source)
+print(json.dumps({"addrs": address.get("addrs", [])}, indent=2))
+PYADDR
 # Translate address hints in the invitation; do not race the host's address-file writer.
 invite=$("$bin" invite --data-dir "$work/host" --label 'Android SDK integration' | python3 "$root/scripts/android/rewrite-emulator-invite.py")
 cd "$root/sdks/android"
