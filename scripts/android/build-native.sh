@@ -5,7 +5,7 @@ root=$(cd "$(dirname "$0")/../.." && pwd)
 # NDK r27 provides 16 KiB-compatible shared libraries with these linker flags.
 export RUSTFLAGS="${RUSTFLAGS:-} -C link-arg=-Wl,-z,max-page-size=16384"
 export CARGO_BUILD_JOBS=${CARGO_BUILD_JOBS:-4}
-out="$root/android/kausway-client/src/main/jniLibs"
+out="$root/sdks/android/kausway-client/src/main/jniLibs"
 stage=$(mktemp -d)
 trap 'rm -rf "$stage"' EXIT
 cd "$root/rust"

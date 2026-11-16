@@ -29,9 +29,9 @@ for crate in kausway-host kausway-transport kausway-client kausway-client-androi
   expect "rust/Cargo.lock ($crate)" "$locked" "$version"
 done
 
-expect jellyfin-plugin/meta.json \
-  "$(sed -n 's/^ *"version": *"\([^"]*\)".*/\1/p' "$root/jellyfin-plugin/meta.json")" "$plugin"
-csproj="$root/jellyfin-plugin/Jellyfin.Plugin.Kausway/Jellyfin.Plugin.Kausway.csproj"
+expect integrations/jellyfin/meta.json \
+  "$(sed -n 's/^ *"version": *"\([^"]*\)".*/\1/p' "$root/integrations/jellyfin/meta.json")" "$plugin"
+csproj="$root/integrations/jellyfin/plugin/Jellyfin.Plugin.Kausway.csproj"
 expect "Jellyfin.Plugin.Kausway.csproj (AssemblyVersion)" \
   "$(sed -n 's/.*<AssemblyVersion>\(.*\)<\/AssemblyVersion>.*/\1/p' "$csproj")" "$plugin"
 expect "Jellyfin.Plugin.Kausway.csproj (FileVersion)" \

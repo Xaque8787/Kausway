@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Packs kausway-host and kausway-test-client into a tarball with a SHA-256 checksum file.
-# Usage: scripts/ci/package-binaries.sh <release dir> <platform label> <output dir>
+# Usage: scripts/packaging/package-binaries.sh <release dir> <platform label> <output dir>
 set -euo pipefail
 
 src=$(cd "$1" && pwd)

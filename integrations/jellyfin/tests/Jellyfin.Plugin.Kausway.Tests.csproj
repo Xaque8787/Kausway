@@ -16,7 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Jellyfin.Plugin.Kausway\Jellyfin.Plugin.Kausway.csproj" />
+    <ProjectReference Include="..\plugin\Jellyfin.Plugin.Kausway.csproj" />
   </ItemGroup>
 
 </Project>

@@ -26,5 +26,5 @@ done
 test -s "$work/host/endpoint-addr.json"
 # Translate address hints in the invitation; do not race the host's address-file writer.
 invite=$("$bin" invite --data-dir "$work/host" --label 'Android SDK integration' | python3 "$root/scripts/android/rewrite-emulator-invite.py")
-cd "$root/android"
+cd "$root/sdks/android"
 ./gradlew :kausway-client:connectedDebugAndroidTest "-Pandroid.testInstrumentationRunnerArguments.kauswayInvite=$invite"

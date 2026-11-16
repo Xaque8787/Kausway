@@ -215,7 +215,7 @@ fn doctor(args: &RunArgs) -> ExitCode {
     if policy.enforcement() == "best_effort_path_gate" {
         report.warn(
             "transport policy",
-            "relay_only and p2p_only are best-effort in this build, not guaranteed; see docs/transport-policies.md",
+            "relay_only and p2p_only are best-effort in this build, not guaranteed; see docs/architecture/transport-policies.md",
         );
     }
     match &config.relay {

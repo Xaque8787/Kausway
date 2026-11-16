@@ -222,7 +222,7 @@ its historical unprefixed local URL and should be used only for development.
 
 ## Build, test and distribute
 
-See [implementation-plan.md](implementation-plan.md) for the extraction design.
+See [implementation-plan.md](../history/android-implementation-plan.md) for the extraction design.
 Prerequisites: Rust 1.99.1, Java 17+, Android SDK 35/build-tools 35.0.0, NDK
 27.2.12479018, Python 3, and `cargo-ndk` 4.1.2. Gradle 8.11.1 is pinned with its
 SHA-256 in the wrapper. Downloaded Rust dependencies are pinned by Cargo.lock.
@@ -232,12 +232,12 @@ rustup target add aarch64-linux-android armv7-linux-androideabi x86_64-linux-and
 cargo install cargo-ndk --version 4.1.2 --locked
 export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.2.12479018"
 bash scripts/android/build-aar.sh
-cd android
+cd sdks/android
 ./gradlew :sample:assembleDebug :kausway-client:assembleDebugAndroidTest
 ```
 
 Outputs: `dist/kausway-client-android-0.4.0.aar`, POM and checksum; native libraries
-remain in `android/kausway-client/src/main/jniLibs/<abi>/libkausway_client.so`. ELF
+remain in `sdks/android/kausway-client/src/main/jniLibs/<abi>/libkausway_client.so`. ELF
 architecture, JNI export and 16 KiB load alignment are checked before packaging;
 AAR contents are checked afterward. Do not distribute an AAR built before all ABI
 checks pass. Release versions come from `rust/Cargo.toml`; the Android adapter inherits that
@@ -256,4 +256,4 @@ as a fallback, with no public relay.
 The sample deliberately has no playback engine dependency; the Media3 integration
 snippet above is illustrative. Media3 playback, physical Android TV devices,
 real mobile network changes and public relay operation require additional device
-validation. See [validation.md](validation.md) for the checks actually performed.
+validation. See [validation.md](../history/android-validation.md) for the checks actually performed.

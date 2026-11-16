@@ -6,6 +6,6 @@ plugins {
 
 // Keep the Android SDK and sample aligned with the host/CLI release version.
 val releaseVersion = Regex("""(?m)^version = "([^"]+)"$""")
-    .find(file("../rust/Cargo.toml").readText())?.groupValues?.get(1)
+    .find(file("../../rust/Cargo.toml").readText())?.groupValues?.get(1)
     ?: error("Missing workspace release version")
 allprojects { version = releaseVersion }

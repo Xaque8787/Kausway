@@ -8,7 +8,7 @@ commit = '1aa691352a5e0c215210dfc9a3c2f2078639dc91'
 url = f'https://raw.githubusercontent.com/rustls/rustls-platform-verifier/{commit}/android-release-support/maven/org/rustls/rustls-platform-verifier/{version}/rustls-platform-verifier-{version}.aar'
 data = urllib.request.urlopen(url, timeout=60).read()
 assert hashlib.sha256(data).hexdigest() == 'aa021794230fbc2f0be355999e2cf67398dd563de066a2e17001ffbd0b69101b', 'TLS support checksum mismatch'
-module = root / 'android/kausway-client'
+module = root / 'sdks/android/kausway-client'
 with zipfile.ZipFile(io.BytesIO(data)) as aar:
     jar = module / 'libs/rustls-platform-verifier.jar'
     jar.parent.mkdir(parents=True, exist_ok=True)

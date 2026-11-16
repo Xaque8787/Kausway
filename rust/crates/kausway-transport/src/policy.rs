@@ -36,7 +36,7 @@ impl TransportPolicy {
     /// How the policy is enforced by this build. Never report a policy as strict until it is.
     ///
     /// `best_effort_path_gate`: requests are refused while Iroh reports a disallowed selected path,
-    /// but Iroh itself may still choose or switch to that path. See docs/transport-policies.md.
+    /// but Iroh itself may still choose or switch to that path. See docs/architecture/transport-policies.md.
     pub fn enforcement(self) -> &'static str {
         match self {
             Self::Auto => "not_restricted",

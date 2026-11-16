@@ -89,7 +89,7 @@ Failure after headers: the host resets the stream with code 7 when the origin fa
 
 Cancellation: the client may stop or reset the stream at any time, for example when the user seeks. The host notices immediately, drops the upstream request, and closes that origin connection. A seek is just a new stream with a new `Range`.
 
-Transport policy: before forwarding, the host checks the connection's selected path against the policy. Under `p2p_only`, it waits up to 5 seconds for Iroh to select a direct path before refusing with `transport_policy_denied`. See `docs/transport-policies.md` for exactly what this does and does not guarantee.
+Transport policy: before forwarding, the host checks the connection's selected path against the policy. Under `p2p_only`, it waits up to 5 seconds for Iroh to select a direct path before refusing with `transport_policy_denied`. See `docs/architecture/transport-policies.md` for exactly what this does and does not guarantee.
 
 ## WebSockets
 

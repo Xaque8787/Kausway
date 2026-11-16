@@ -4,7 +4,7 @@ Status: historical architecture proposal. SDK validation/stabilization and the
 Kausway repository/name decision are complete. Baseline import is complete;
 Kausway naming/configuration is implemented locally. Maven Central, iOS and
 additional platform/UI work are deferred until after migration. See
-[the migration validation record](docs/migration/kausway-naming.md).
+[the migration validation record](migration/kausway-naming.md).
 
 This document proposes future work; it does not change
 the current architecture, release process, protocol, or supported platforms.

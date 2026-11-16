@@ -172,7 +172,7 @@ jobs:
     runs-on: ubuntu-24.04
     defaults:
       run:
-        working-directory: jellyfin-plugin
+        working-directory: integrations/jellyfin
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: "1"
       DOTNET_NOLOGO: "1"
@@ -180,16 +180,16 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-dotnet@v6
         with:
-          global-json-file: jellyfin-plugin/global.json
+          global-json-file: integrations/jellyfin/global.json
       - name: Build
-        run: dotnet build Jellyfin.Plugin.Kausway/Jellyfin.Plugin.Kausway.csproj -c Release
+        run: dotnet build plugin/Jellyfin.Plugin.Kausway.csproj -c Release
       - name: Tests
-        run: dotnet test Jellyfin.Plugin.Kausway.Tests/Jellyfin.Plugin.Kausway.Tests.csproj -c Release
+        run: dotnet test tests/Jellyfin.Plugin.Kausway.Tests.csproj -c Release
       - name: Dashboard page script parses
         run: |
           python3 - <<'EOF' > "$RUNNER_TEMP/configPage.js"
           import re
-          html = open("Jellyfin.Plugin.Kausway/Configuration/configPage.html", encoding="utf-8").read()
+          html = open("plugin/Configuration/configPage.html", encoding="utf-8").read()
           scripts = re.findall(r"<script[^>]*>(.*?)</script>", html, re.S)
           assert len(scripts) == 1, scripts
           print(scripts[0])
@@ -207,6 +207,7 @@ jobs:
         uses: docker/build-push-action@v7
         with:
           context: .
+          file: deploy/jellyfin/Dockerfile
           load: true
           tags: kausway:ci
           cache-from: type=gha

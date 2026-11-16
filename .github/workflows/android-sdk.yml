@@ -2,9 +2,9 @@ name: Android SDK
 on:
   push:
     branches: ["**"]
-    paths: ['rust/**', 'android/**', 'scripts/android/**', '.github/workflows/android-sdk.yml']
+    paths: ['rust/**', 'sdks/android/**', 'examples/android-basic/**', 'scripts/android/**', '.github/workflows/android-sdk.yml']
   pull_request:
-    paths: ['rust/**', 'android/**', 'scripts/android/**', '.github/workflows/android-sdk.yml']
+    paths: ['rust/**', 'sdks/android/**', 'examples/android-basic/**', 'scripts/android/**', '.github/workflows/android-sdk.yml']
   workflow_dispatch:
   workflow_call:
 permissions:
@@ -44,7 +44,7 @@ jobs:
             rust/target
             ~/.gradle/caches
             ~/.gradle/wrapper
-          key: sdk-${{ runner.os }}-${{ hashFiles('rust/Cargo.lock', 'android/**/*.gradle.kts', 'android/gradle/wrapper/gradle-wrapper.properties') }}
+          key: sdk-${{ runner.os }}-${{ hashFiles('rust/Cargo.lock', 'sdks/android/**/*.gradle.kts', 'examples/android-basic/*.gradle.kts', 'sdks/android/gradle/wrapper/gradle-wrapper.properties') }}
           restore-keys: sdk-${{ runner.os }}-
       - name: Emulator invitation fixture tests
         run: python3 -m unittest discover -s scripts/android -p 'test_*.py'
@@ -59,15 +59,15 @@ jobs:
       - name: Build and inspect AAR
         run: ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.2.12479018" bash scripts/android/build-aar.sh
       - name: Independent AAR consumer compiles
-        working-directory: android
+        working-directory: sdks/android
         run: ./gradlew :sample:assembleDebug :kausway-client:assembleDebugAndroidTest
       - uses: actions/upload-artifact@v4
         with:
           name: kausway-client-android-${{ steps.version.outputs.version }}
           path: |
             dist/kausway-client-android-${{ steps.version.outputs.version }}.*
-            android/kausway-client/src/main/jniLibs/*/*.so
-            android/sample/build/outputs/apk/debug/*.apk
+            sdks/android/kausway-client/src/main/jniLibs/*/*.so
+            examples/android-basic/build/outputs/apk/debug/*.apk
           if-no-files-found: error
       - name: Enable KVM access
         run: |
@@ -93,4 +93,4 @@ jobs:
         if: always()
         with:
           name: android-sdk-test-results
-          path: android/kausway-client/build/reports/androidTests/
+          path: sdks/android/kausway-client/build/reports/androidTests/

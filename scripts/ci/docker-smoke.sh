@@ -8,7 +8,7 @@ set -euo pipefail
 image=$1
 root=$(cd "$(dirname "$0")/../.." && pwd)
 host_version=$(bash "$root/scripts/ci/check-version.sh")
-expected_plugin=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$root/jellyfin-plugin/meta.json")
+expected_plugin=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$root/integrations/jellyfin/meta.json")
 actual_host=$(docker run --rm --entrypoint /usr/local/bin/kausway-host "$image" --version)
 test "$actual_host" = "kausway-host $host_version"
 echo "bundled $actual_host; expected plugin $expected_plugin"

@@ -117,7 +117,7 @@ jobs:
         run: bash ../scripts/ci/e2e.sh target/${{ matrix.target }}/release
 
       - name: Package
-        run: bash ../scripts/ci/package-binaries.sh target/${{ matrix.target }}/release ${{ matrix.target }} "$RUNNER_TEMP/dist"
+        run: bash ../scripts/packaging/package-binaries.sh target/${{ matrix.target }}/release ${{ matrix.target }} "$RUNNER_TEMP/dist"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -167,7 +167,7 @@ jobs:
       - name: Package
         run: |
           file target/${{ matrix.target }}/release/kausway-test-client
-          bash ../scripts/ci/package-binaries.sh target/${{ matrix.target }}/release android-${{ matrix.abi }} "$RUNNER_TEMP/dist"
+          bash ../scripts/packaging/package-binaries.sh target/${{ matrix.target }}/release android-${{ matrix.abi }} "$RUNNER_TEMP/dist"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -186,10 +186,10 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-dotnet@v6
         with:
-          global-json-file: jellyfin-plugin/global.json
+          global-json-file: integrations/jellyfin/global.json
 
       - name: Test
-        run: dotnet test jellyfin-plugin/Jellyfin.Plugin.Kausway.Tests/Jellyfin.Plugin.Kausway.Tests.csproj -c Release
+        run: dotnet test integrations/jellyfin/tests/Jellyfin.Plugin.Kausway.Tests.csproj -c Release
 
       # The zip holds the JellyfinKausway_<version> folder that goes into Jellyfin's plugins directory.
       - name: Build and package
@@ -197,8 +197,8 @@ jobs:
           VERSION: ${{ needs.version.outputs.version }}
         run: |
           set -eux
-          dotnet publish jellyfin-plugin/Jellyfin.Plugin.Kausway/Jellyfin.Plugin.Kausway.csproj -c Release -o "$RUNNER_TEMP/publish"
-          sh docker/package-plugin.sh "$RUNNER_TEMP/publish" jellyfin-plugin/meta.json "$RUNNER_TEMP/plugin"
+          dotnet publish integrations/jellyfin/plugin/Jellyfin.Plugin.Kausway.csproj -c Release -o "$RUNNER_TEMP/publish"
+          sh scripts/packaging/package-plugin.sh "$RUNNER_TEMP/publish" integrations/jellyfin/meta.json "$RUNNER_TEMP/plugin"
           name="kausway-$VERSION-jellyfin-plugin.zip"
           mkdir -p "$RUNNER_TEMP/dist"
           (cd "$RUNNER_TEMP/plugin" && zip -r "$RUNNER_TEMP/dist/$name" .)

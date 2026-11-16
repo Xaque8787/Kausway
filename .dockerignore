@@ -3,8 +3,8 @@
 .v3
 .env
 rust/target
-jellyfin-plugin/**/bin
-jellyfin-plugin/**/obj
+integrations/jellyfin/**/bin
+integrations/jellyfin/**/obj
 config
 cache
 media
@@ -12,6 +12,13 @@ kausway-data
 kausway-client-data
 
 # Android consumers and their generated SDK artifacts are not part of the server image.
-android
+sdks
+examples
 dist
 **/__pycache__
+
+# Persistent data beside the Jellyfin Compose file
+deploy/jellyfin/config
+deploy/jellyfin/cache
+deploy/jellyfin/media
+deploy/jellyfin/kausway-data

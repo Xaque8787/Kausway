@@ -5,7 +5,9 @@ name: kausway
 
 services:
   jellyfin:
-    build: .
+    build:
+      context: ../..
+      dockerfile: deploy/jellyfin/Dockerfile
     image: kausway:local
     init: true
     restart: unless-stopped
