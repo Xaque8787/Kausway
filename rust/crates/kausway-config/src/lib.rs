@@ -94,6 +94,7 @@ impl Default for Manager {
 pub struct Admin {
     pub enabled: bool,
     pub listen: String,
+    pub browser_base_url: Option<String>,
     pub auth: Auth,
 }
 impl Default for Admin {
@@ -101,6 +102,7 @@ impl Default for Admin {
         Self {
             enabled: false,
             listen: "127.0.0.1:47951".into(),
+            browser_base_url: None,
             auth: Auth::default(),
         }
     }

@@ -57,4 +57,5 @@ planned separately. The future standalone deployment will live in `deploy/standa
 Shared suite configuration and platform storage defaults are described in
 [configuration and storage](docs/architecture/configuration-and-storage.md).
 The optional manager is implemented: see [manager operations](docs/operations/manager.md).
-The admin web server remains a subsequent phase.
+The [admin server](docs/operations/admin.md) supports first-run account setup,
+login and credential recovery. Host administration screens remain a subsequent phase.

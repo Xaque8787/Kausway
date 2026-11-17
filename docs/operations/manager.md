@@ -162,14 +162,15 @@ Only manager-generated lifecycle messages are retained (up to 64). Arbitrary
 child stdout/stderr is drained with bounded buffers and omitted because it can
 contain invitation links or credentials. To diagnose a host configuration error,
 use standalone `kausway-host doctor` with the same selected config and overrides.
-Structured admin setup-link delivery/logging belongs to Phase 3; this manager
-phase does not expose raw child logs as a substitute for that interface.
+Admin emits a bounded structured startup setup-link event. The manager forwards
+that intentionally sensitive link to startup stderr, never to retained diagnostics.
+Other raw child output remains omitted. See [admin setup](admin.md).
 
 ## Optional admin launch hook
 
 `--admin-ui[=true|false]` / `KAUSWAY_ADMIN_ENABLED` overrides `admin.enabled` at
 manager startup. Admin is disabled by default. If enabled, the executable must
-exist; this phase does not provide an admin implementation.
+exist; Phase 3 now provides the admin authentication server.
 
 The agreed child invocation is:
 
@@ -179,8 +180,8 @@ kausway-admin --config <shared-file> --data-dir <root>/admin --manager-socket <s
 
 Admin remains running when the host is stopped. Manager exit reaps it. An admin
 exit is reported as failed without stopping host supervision. At this phase,
-admin status reports process existence only; web readiness, authentication and
-admin recovery behavior will be completed with the actual Phase 3 server.
+admin status reports process existence only; web readiness is not inferred from process existence. Phase 3 supplies
+authentication; an exited admin is reported as failed without automatic recovery.
 
 ## Validation
 

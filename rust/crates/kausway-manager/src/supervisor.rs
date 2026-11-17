@@ -325,6 +325,49 @@ fn policy(args: &RunArgs, mut saved: Manager) -> Result<Manager, String> {
 }
 
 fn spawn(command: &mut Command) -> std::io::Result<Child> {
+    spawn_child(command, false)
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AdminStartupEvent {
+    event: String,
+    url: String,
+    expires_in_secs: u64,
+}
+fn forward_admin_event(bytes: &[u8]) {
+    let Ok(event) = serde_json::from_slice::<AdminStartupEvent>(bytes) else {
+        return;
+    };
+    let Some((base, token)) = event.url.split_once("#token=") else {
+        return;
+    };
+    let Ok(uri) = base.parse::<hyper::Uri>() else {
+        return;
+    };
+    let local = uri.host().is_some_and(|h| {
+        h == "localhost"
+            || h.trim_matches(['[', ']'])
+                .parse::<std::net::IpAddr>()
+                .is_ok_and(|ip| ip.is_loopback())
+    });
+    if event.event == "setup_link"
+        && event.expires_in_secs == 900
+        && uri.scheme_str() == Some("http")
+        && local
+        && uri.path() == "/setup"
+        && uri.query().is_none()
+        && token.len() == 64
+        && token.bytes().all(|c| c.is_ascii_hexdigit())
+    {
+        // Intentionally sensitive startup output, never retained in diagnostics/status.
+        eprintln!(
+            "Kausway administrator setup (expires in 15 minutes): {}",
+            event.url
+        );
+    }
+}
+fn spawn_child(command: &mut Command, admin_events: bool) -> std::io::Result<Child> {
     let mut child = command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -336,7 +379,30 @@ fn spawn(command: &mut Command) -> std::io::Result<Child> {
     if let Some(mut stdout) = child.stdout.take() {
         tokio::spawn(async move {
             let mut bytes = [0u8; 4096];
-            while matches!(stdout.read(&mut bytes).await, Ok(n) if n > 0) {}
+            let mut line = Vec::new();
+            let mut oversized = false;
+            while let Ok(n) = stdout.read(&mut bytes).await {
+                if n == 0 {
+                    break;
+                }
+                if !admin_events {
+                    continue;
+                }
+                for byte in &bytes[..n] {
+                    if *byte == b'\n' {
+                        if !oversized {
+                            forward_admin_event(&line);
+                        }
+                        line.clear();
+                        oversized = false;
+                    } else if line.len() < 4096 && !oversized {
+                        line.push(*byte);
+                    } else {
+                        line.clear();
+                        oversized = true;
+                    }
+                }
+            }
         });
     }
     if let Some(mut stderr) = child.stderr.take() {
@@ -575,11 +641,10 @@ pub async fn run(args: RunArgs) -> Result<(), String> {
             .arg("--data-dir")
             .arg(supervisor.root.join("admin"))
             .arg("--manager-socket")
-            .arg(&socket_path);
-        supervisor.admin = Some(
-            spawn(&mut command)
-                .map_err(|e| format!("cannot launch admin (Phase 3 binary required): {e}"))?,
-        );
+            .arg(&socket_path)
+            .env("KAUSWAY_ADMIN_STARTUP_EVENTS", "1");
+        supervisor.admin =
+            Some(spawn_child(&mut command, true).map_err(|e| format!("cannot launch admin: {e}"))?);
         supervisor.admin_observed = Observed::Running;
         supervisor.event("admin child launched (process status only)");
     }
