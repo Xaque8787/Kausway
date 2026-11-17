@@ -232,7 +232,12 @@ pub struct DataArgs {
     #[arg(long, env = "KAUSWAY_CONFIG")]
     pub config: Option<PathBuf>,
     /// Directory holding identity.key, state.json, and host.lock.
-    #[arg(long, env = "KAUSWAY_DATA_DIR", default_value = "./kausway-data")]
+    #[arg(
+        long,
+        env = "KAUSWAY_DATA_DIR",
+        default_value = "./kausway-data",
+        hide_default_value = true
+    )]
     pub data_dir: PathBuf,
 }
 

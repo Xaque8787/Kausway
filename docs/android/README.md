@@ -4,6 +4,9 @@ Transport for existing Android HTTP clients and players. The SDK pairs with the
 unchanged protocol-v1 host and exposes its HTTP origin through an embedded loopback
 proxy. It does not decode media, transcode, host Jellyfin, or require a terminal.
 
+See [Android storage and standalone binaries](storage.md) for host/CLI defaults
+and app-private directory selection.
+
 ## Artifact and requirements
 
 - Artifact: `kausway-client-android-0.4.0.aar`; namespace `io.github.xaque8787.kausway`.

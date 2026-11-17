@@ -6,6 +6,17 @@ Paths are relative to the current working directory unless absolute. Explicit fl
 override their environment variables. Host options belong after the subcommand;
 client data/relay/name options are global and may appear before or after it.
 
+## Storage defaults
+
+Host subcommands accept `--config` / `KAUSWAY_CONFIG` for the shared suite file.
+Host data defaults are platform-specific; see [configuration and storage](../architecture/configuration-and-storage.md).
+On Android, native host/CLI defaults honor absolute XDG/HOME paths, otherwise use
+`<cwd>/kausway/config.toml` and `<cwd>/kausway/data/host` or `client/`.
+Explicit host/client data-directory overrides always take precedence. The client
+help snapshots below describe non-Android builds (`./kausway-client-data`).
+Embedded Android apps should select app-private directories as described in
+[Android storage](../android/storage.md).
+
 ## Additional parameter rules
 
 - Host `--origin`: plain HTTP authority only; no base path, query
@@ -70,7 +81,7 @@ Print this host's endpoint id, creating the identity on first run
 Usage: kausway-host identity [OPTIONS]
 
 Options:
-      --data-dir <DATA_DIR>  Directory holding identity.key, state.json, and host.lock [env: KAUSWAY_DATA_DIR=] [default: ./kausway-data]
+      --data-dir <DATA_DIR>  Directory holding identity.key, state.json, and host.lock [env: KAUSWAY_DATA_DIR=]
   -h, --help                 Print help
 ```
 
@@ -83,7 +94,7 @@ Usage: kausway-host doctor [OPTIONS]
 
 Options:
       --data-dir <DATA_DIR>
-          Directory holding identity.key, state.json, and host.lock [env: KAUSWAY_DATA_DIR=] [default: ./kausway-data]
+          Directory holding identity.key, state.json, and host.lock [env: KAUSWAY_DATA_DIR=]
       --origin <ORIGIN>
           Local HTTP service to forward requests to. Plain http:// only [env: KAUSWAY_ORIGIN=] [default: http://127.0.0.1:8096]
       --policy <POLICY>
@@ -113,7 +124,7 @@ Usage: kausway-host serve [OPTIONS]
 
 Options:
       --data-dir <DATA_DIR>
-          Directory holding identity.key, state.json, and host.lock [env: KAUSWAY_DATA_DIR=] [default: ./kausway-data]
+          Directory holding identity.key, state.json, and host.lock [env: KAUSWAY_DATA_DIR=]
       --origin <ORIGIN>
           Local HTTP service to forward requests to. Plain http:// only [env: KAUSWAY_ORIGIN=] [default: http://127.0.0.1:8096]
       --policy <POLICY>
@@ -142,7 +153,7 @@ Create a one-time invitation link for a new device
 Usage: kausway-host invite [OPTIONS]
 
 Options:
-      --data-dir <DATA_DIR>    Directory holding identity.key, state.json, and host.lock [env: KAUSWAY_DATA_DIR=] [default: ./kausway-data]
+      --data-dir <DATA_DIR>    Directory holding identity.key, state.json, and host.lock [env: KAUSWAY_DATA_DIR=]
       --label <LABEL>          Name shown in the device list, for example "Living room TV" [default: "New device"]
       --ttl-secs <TTL_SECS>    How long the link stays valid, in seconds (60 to 86400)
       --relay-url <RELAY_URL>  Relay to put in the link when the running host's address is not known. Same values as serve [env: KAUSWAY_RELAY_URL=]
@@ -157,7 +168,7 @@ List paired devices
 Usage: kausway-host devices [OPTIONS]
 
 Options:
-      --data-dir <DATA_DIR>  Directory holding identity.key, state.json, and host.lock [env: KAUSWAY_DATA_DIR=] [default: ./kausway-data]
+      --data-dir <DATA_DIR>  Directory holding identity.key, state.json, and host.lock [env: KAUSWAY_DATA_DIR=]
   -h, --help                 Print help
 ```
 
@@ -172,7 +183,7 @@ Arguments:
   <ENDPOINT_ID>  Endpoint id of the device, as shown by `devices`
 
 Options:
-      --data-dir <DATA_DIR>  Directory holding identity.key, state.json, and host.lock [env: KAUSWAY_DATA_DIR=] [default: ./kausway-data]
+      --data-dir <DATA_DIR>  Directory holding identity.key, state.json, and host.lock [env: KAUSWAY_DATA_DIR=]
   -h, --help                 Print help
 ```
 

@@ -20,16 +20,23 @@ explicitly override a saved true value; the flag without a value means true.
 | Platform | Configuration file | Suite data root |
 | --- | --- | --- |
 | Linux | `$XDG_CONFIG_HOME/kausway/config.toml` or `~/.config/kausway/config.toml` | `$XDG_DATA_HOME/kausway` or `~/.local/share/kausway` |
+| Android native CLI | Absolute XDG/HOME paths as on Linux; otherwise `<cwd>/kausway/config.toml` | Absolute XDG/HOME paths as on Linux; otherwise `<cwd>/kausway/data` |
 | macOS | `~/Library/Application Support/Kausway/config.toml` | `~/Library/Application Support/Kausway` |
 | Windows | `%LOCALAPPDATA%\Kausway\config.toml` | `%LOCALAPPDATA%\Kausway` |
 
 Paths belong to the account running the process. Relative XDG roots are ignored.
 Default component data directories are `host/`, `manager/`, `admin/`, `client/`.
 The host uses `host/`; its explicit `--data-dir` selects the component directory,
-not the suite root. The future manager will pass these same resolved paths to
+not the suite root. The manager passes these same resolved paths to
 children. Independent applications should choose distinct explicit paths.
-The existing test client is unchanged in this phase; its CLI/TUI configuration
-integration is separate work.
+The Android CLI client now uses the shared Android default data root plus `client/`.
+Its explicit `--data-dir` / `KAUSWAY_CLIENT_DATA_DIR` wins. Other CLI client platforms
+retain `./kausway-client-data`; client configuration-file/TUI integration is separate work.
+The Android SDK already uses app-private storage and is unchanged.
+See [Android storage](../android/storage.md) for terminal and app integration examples.
+
+Windows/macOS path rules are implemented assumptions, not platform validation.
+Native build and runtime checks will be added with their release workflows.
 
 Missing configuration is initialized automatically. Only the selected component's
 state is created. Inaccessible or corrupt storage fails rather than selecting a

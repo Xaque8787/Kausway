@@ -26,13 +26,12 @@ struct Cli {
 #[derive(Debug, Args)]
 struct Common {
     /// Directory holding this client's identity and the paired host's address.
-    #[arg(
-        long,
-        global = true,
-        env = "KAUSWAY_CLIENT_DATA_DIR",
-        default_value = "./kausway-client-data"
+    #[arg(long, global = true, env = "KAUSWAY_CLIENT_DATA_DIR")]
+    #[cfg_attr(
+        not(target_os = "android"),
+        arg(default_value = "./kausway-client-data")
     )]
-    data_dir: PathBuf,
+    data_dir: Option<PathBuf>,
     /// Relay URL. Empty uses Iroh's default relays; `none` disables relays.
     #[arg(long, global = true, env = "KAUSWAY_RELAY_URL")]
     relay_url: Option<String>,
@@ -81,8 +80,17 @@ async fn main() -> ExitCode {
 
 async fn run(cli: Cli) -> Result<(), String> {
     let common = cli.common;
+    let data_dir = match common.data_dir {
+        Some(path) => path,
+        #[cfg(target_os = "android")]
+        None => kausway_config::Paths::defaults()
+            .map_err(|e| e.to_string())?
+            .component(kausway_config::Component::Client),
+        #[cfg(not(target_os = "android"))]
+        None => PathBuf::from("./kausway-client-data"),
+    };
     let client = Client::new(ClientConfig {
-        data_dir: common.data_dir,
+        data_dir,
         name: common.name,
         relay: parse_relay(common.relay_url.as_deref())?,
     })

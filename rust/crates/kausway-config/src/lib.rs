@@ -195,6 +195,7 @@ impl Paths {
         Self::from_environment(|k| env::var_os(k).map(PathBuf::from))
     }
     pub fn from_environment(get: impl Fn(&str) -> Option<PathBuf>) -> Result<Self, Error> {
+        #[cfg(not(target_os = "android"))]
         let required = |key| {
             get(key).filter(|p| p.is_absolute()).ok_or_else(|| {
                 Error::Invalid(format!("{key} must identify an absolute user directory"))
@@ -210,7 +211,7 @@ impl Paths {
             let base = required("HOME")?.join("Library/Application Support/Kausway");
             (base.clone(), base)
         };
-        #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+        #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "android")))]
         let (config, data) = {
             let xdg = |key, fallback: &str| -> Result<PathBuf, Error> {
                 match get(key).filter(|p| p.is_absolute()) {
@@ -223,6 +224,8 @@ impl Paths {
                 xdg("XDG_DATA_HOME", ".local/share")?,
             )
         };
+        #[cfg(target_os = "android")]
+        let (config, data) = android_roots(get, env::current_dir)?;
         Ok(Self {
             config: config.join("config.toml"),
             data_root: data,
@@ -232,6 +235,34 @@ impl Paths {
         self.data_root.join(component.as_str())
     }
 }
+// Android native executables have no Context from which to discover app-private
+// storage. Terminal defaults use explicit absolute XDG/HOME roots when available,
+// otherwise a deterministic working-directory layout. Never probe writability
+// and silently fall back: initialization errors belong to the selected location.
+#[cfg(any(target_os = "android", all(test, unix)))]
+fn android_roots(
+    get: impl Fn(&str) -> Option<PathBuf>,
+    working_directory: impl FnOnce() -> io::Result<PathBuf>,
+) -> Result<(PathBuf, PathBuf), Error> {
+    let absolute = |key| get(key).filter(|p| p.is_absolute());
+    let config = absolute("XDG_CONFIG_HOME")
+        .map(|p| p.join("kausway"))
+        .or_else(|| absolute("HOME").map(|p| p.join(".config/kausway")));
+    let data = absolute("XDG_DATA_HOME")
+        .map(|p| p.join("kausway"))
+        .or_else(|| absolute("HOME").map(|p| p.join(".local/share/kausway")));
+    match (config, data) {
+        (Some(config), Some(data)) => Ok((config, data)),
+        (config, data) => {
+            let root = working_directory()?.join("kausway");
+            Ok((
+                config.unwrap_or_else(|| root.clone()),
+                data.unwrap_or_else(|| root.join("data")),
+            ))
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum Component {
     Host,
@@ -453,5 +484,67 @@ mod tests {
             paths.component(Component::Host),
             PathBuf::from("/users/test/.local/share/kausway/host")
         );
+    }
+}
+
+#[cfg(all(test, unix))]
+mod android_path_tests {
+    use super::*;
+    #[test]
+    fn missing_environment_uses_working_directory_with_separate_components() {
+        let (config, data) = android_roots(|_| None, || Ok("/terminal/work".into())).unwrap();
+        assert_eq!(
+            config.join("config.toml"),
+            PathBuf::from("/terminal/work/kausway/config.toml")
+        );
+        let paths = Paths {
+            config: config.join("config.toml"),
+            data_root: data,
+        };
+        assert_eq!(
+            paths.component(Component::Host),
+            PathBuf::from("/terminal/work/kausway/data/host")
+        );
+        assert_eq!(
+            paths.component(Component::Client),
+            PathBuf::from("/terminal/work/kausway/data/client")
+        );
+    }
+    #[test]
+    fn absolute_environment_paths_do_not_need_a_working_directory() {
+        let (config, data) = android_roots(
+            |key| match key {
+                "HOME" => Some("/termux/home".into()),
+                "XDG_CONFIG_HOME" => Some("/settings".into()),
+                _ => None,
+            },
+            || panic!("must not inspect working directory"),
+        )
+        .unwrap();
+        assert_eq!(config, PathBuf::from("/settings/kausway"));
+        assert_eq!(data, PathBuf::from("/termux/home/.local/share/kausway"));
+    }
+    #[test]
+    fn relative_environment_is_ignored_and_partial_xdg_is_respected() {
+        let (config, data) = android_roots(
+            |key| match key {
+                "HOME" => Some("relative-home".into()),
+                "XDG_CONFIG_HOME" => Some("relative-config".into()),
+                "XDG_DATA_HOME" => Some("/data-root".into()),
+                _ => None,
+            },
+            || Ok("/work".into()),
+        )
+        .unwrap();
+        assert_eq!(config, PathBuf::from("/work/kausway"));
+        assert_eq!(data, PathBuf::from("/data-root/kausway"));
+    }
+    #[test]
+    fn inaccessible_working_directory_is_an_error_not_another_fallback() {
+        let error = android_roots(
+            |_| None,
+            || Err(io::Error::new(io::ErrorKind::PermissionDenied, "denied")),
+        );
+        assert!(matches!(error, Err(Error::Io(_))));
     }
 }
