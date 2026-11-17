@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "crates/kausway-config",
     "crates/kausway-transport",
     "crates/kausway-host",
     "crates/kausway-client",
@@ -41,3 +42,5 @@ tokio-util = { version = "0.7.16", features = ["io", "rt"] }
 kausway-transport = { path = "crates/kausway-transport" }
 
 kausway-client = { path = "crates/kausway-client" }
+
+kausway-config = { path = "crates/kausway-config" }

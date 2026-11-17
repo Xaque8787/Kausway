@@ -53,3 +53,7 @@ See [pinned versions](docs/operations/versions.md),
 
 Maven Central publication, iOS bindings and a standalone sidecar Docker image are
 planned separately. The future standalone deployment will live in `deploy/standalone/`.
+
+Shared suite configuration and platform storage defaults are described in
+[configuration and storage](docs/architecture/configuration-and-storage.md).
+Manager and admin execution remain planned subsequent phases.

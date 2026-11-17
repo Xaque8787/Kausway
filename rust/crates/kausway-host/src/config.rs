@@ -3,8 +3,9 @@
 use std::net::SocketAddr;
 use std::path::PathBuf;
 
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand};
 use iroh::RelayUrl;
+use kausway_config::{Change, Component, Paths, Settings, Source, Store, setting};
 use kausway_transport::net::RelayChoice;
 use kausway_transport::policy::TransportPolicy;
 use kausway_transport::proxy::Origin;
@@ -22,6 +23,159 @@ use crate::state::STATE_FILE;
 pub struct Cli {
     #[command(subcommand)]
     pub command: Command,
+}
+
+impl Cli {
+    /// Resolve sources before converting matches, preserving explicit CLI/environment values.
+    pub fn resolve() -> Result<(Self, Settings), String> {
+        let matches = Self::command().get_matches();
+        Self::resolve_matches(matches)
+    }
+
+    fn resolve_matches(matches: clap::ArgMatches) -> Result<(Self, Settings), String> {
+        let mut cli = Self::from_arg_matches(&matches).map_err(|e| e.to_string())?;
+        let (name, sub) = matches.subcommand().ok_or("missing command")?;
+        let paths = Paths::defaults().map_err(|e| e.to_string())?;
+        let data = match &mut cli.command {
+            Command::Serve(a) | Command::Doctor(a) => &mut a.data,
+            Command::Identity(a) | Command::Devices(a) => a,
+            Command::Invite(a) => &mut a.data,
+            Command::Revoke(a) => &mut a.data,
+        };
+        if sub.value_source("data_dir") == Some(clap::parser::ValueSource::DefaultValue) {
+            data.data_dir = paths.component(Component::Host);
+        }
+        let config_path = data.config.clone().unwrap_or(paths.config);
+        let saved = Store::new(&config_path)
+            .load_or_create()
+            .map_err(|e| e.to_string())?
+            .config;
+        data.config = Some(config_path);
+        let mut metadata = Settings::new();
+        let source = |id: &str, has_saved: bool| match sub.value_source(id) {
+            Some(clap::parser::ValueSource::CommandLine) => Source::Cli,
+            Some(clap::parser::ValueSource::EnvVariable) => Source::Environment,
+            _ if has_saved => Source::File,
+            _ => Source::Default,
+        };
+        if let Command::Serve(a) | Command::Doctor(a) = &mut cli.command {
+            macro_rules! scalar {
+                ($id:literal, $field:expr, $saved:expr, $key:literal, $change:expr) => {{
+                    let value = $saved;
+                    let src = source($id, value.is_some());
+                    if src == Source::File {
+                        $field = value.clone().unwrap();
+                    }
+                    metadata.insert(
+                        $key.into(),
+                        setting(
+                            value.map(|v| serde_json::json!(v)),
+                            serde_json::json!($field),
+                            src,
+                            $change,
+                            false,
+                        ),
+                    );
+                }};
+            }
+            macro_rules! optional_value {
+                ($id:literal, $field:expr, $saved:expr, $key:literal, $default:expr, $change:expr) => {{
+                    let value = $saved;
+                    let src = source($id, value.is_some());
+                    if src == Source::File {
+                        $field = value.clone();
+                    }
+                    metadata.insert(
+                        $key.into(),
+                        setting(
+                            value.map(|v| serde_json::json!(v)),
+                            serde_json::json!($field.clone().unwrap_or_else(|| $default.into())),
+                            src,
+                            $change,
+                            false,
+                        ),
+                    );
+                }};
+            }
+            scalar!(
+                "origin",
+                a.origin,
+                saved.host.origin,
+                "host.origin",
+                Change::Restart
+            );
+            scalar!(
+                "control_listen",
+                a.control_listen,
+                saved.host.control.listen,
+                "host.control.listen",
+                Change::Restart
+            );
+            scalar!(
+                "control_allow_remote",
+                a.control_allow_remote,
+                saved.host.control.allow_remote,
+                "host.control.allow_remote",
+                Change::Restart
+            );
+            optional_value!(
+                "policy",
+                a.policy,
+                saved.host.policy,
+                "host.policy",
+                "auto",
+                Change::Live
+            );
+            optional_value!(
+                "relay_url",
+                a.relay_url,
+                saved.host.relay_url,
+                "host.relay_url",
+                "",
+                Change::Restart
+            );
+            optional_value!(
+                "websockets",
+                a.websockets,
+                saved.host.websockets.map(|v| if v {
+                    "on".to_string()
+                } else {
+                    "off".to_string()
+                }),
+                "host.websockets",
+                "on",
+                Change::Live
+            );
+            optional_value!(
+                "websocket_origin",
+                a.websocket_origin,
+                saved.host.websocket_origin,
+                "host.websocket_origin",
+                "rewrite",
+                Change::Live
+            );
+            metadata.insert(
+                "host.control.token".into(),
+                setting(
+                    None,
+                    serde_json::json!(a.control_token),
+                    source("control_token", false),
+                    Change::Restart,
+                    true,
+                ),
+            );
+            a.validate().map_err(|e| e.join("; "))?;
+        } else if name == "invite"
+            && let Command::Invite(a) = &mut cli.command
+            && !matches!(
+                source("relay_url", false),
+                Source::Cli | Source::Environment
+            )
+        {
+            a.relay_url = saved.host.relay_url;
+        }
+        Ok((cli, metadata))
+    }
 }
 
 #[derive(Debug, Subcommand)]
@@ -65,12 +219,15 @@ pub struct RevokeArgs {
 
 #[derive(Debug, Clone, Args)]
 pub struct DataArgs {
+    /// Shared suite configuration file (does not relocate host state).
+    #[arg(long, env = "KAUSWAY_CONFIG")]
+    pub config: Option<PathBuf>,
     /// Directory holding identity.key, state.json, and host.lock.
     #[arg(long, env = "KAUSWAY_DATA_DIR", default_value = "./kausway-data")]
     pub data_dir: PathBuf,
 }
 
-#[derive(Debug, Clone, Args)]
+#[derive(Clone, Args)]
 pub struct RunArgs {
     #[command(flatten)]
     pub data: DataArgs,
@@ -87,7 +244,7 @@ pub struct RunArgs {
     #[arg(long, env = "KAUSWAY_CONTROL_LISTEN", default_value = DEFAULT_CONTROL_LISTEN)]
     pub control_listen: String,
     /// Allow the control API to listen on a non-loopback address.
-    #[arg(long, env = "KAUSWAY_CONTROL_ALLOW_REMOTE")]
+    #[arg(long, env = "KAUSWAY_CONTROL_ALLOW_REMOTE", action = clap::ArgAction::Set, num_args = 0..=1, default_missing_value = "true", default_value = "false")]
     pub control_allow_remote: bool,
     /// Control API token. When unset, the token in <data-dir>/control.token is used or created.
     #[arg(long, env = "KAUSWAY_CONTROL_TOKEN", hide_env_values = true)]
@@ -99,6 +256,12 @@ pub struct RunArgs {
     /// When omitted, the setting in state.json is used.
     #[arg(long, env = "KAUSWAY_WEBSOCKET_ORIGIN")]
     pub websocket_origin: Option<String>,
+}
+
+impl std::fmt::Debug for RunArgs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("RunArgs { contents: <redacted> }")
+    }
 }
 
 pub const DEFAULT_CONTROL_LISTEN: &str = "127.0.0.1:47950";
@@ -243,6 +406,7 @@ mod tests {
         RunArgs {
             data: DataArgs {
                 data_dir: "./data".into(),
+                config: None,
             },
             origin: origin.into(),
             policy: policy.map(Into::into),
@@ -336,6 +500,37 @@ mod tests {
             .validate()
             .unwrap_err();
         assert_eq!(problems.len(), 3, "{problems:?}");
+    }
+
+    #[test]
+    fn file_values_and_explicit_false_overrides_are_resolved() {
+        let dir = crate::fsutil::test_support::TempDir::create();
+        let path = dir.0.join("config.toml");
+        std::fs::write(&path, "schema_version = 1\n[host]\norigin = 'http://localhost:9999'\n[host.control]\nlisten = '0.0.0.0:47950'\nallow_remote = true\n").unwrap();
+        let matches = Cli::command()
+            .try_get_matches_from([
+                "kausway-host",
+                "serve",
+                "--config",
+                path.to_str().unwrap(),
+                "--origin",
+                "http://localhost:8888",
+                "--control-allow-remote=false",
+                "--control-listen",
+                "127.0.0.1:47950",
+            ])
+            .unwrap();
+        let (cli, metadata) = Cli::resolve_matches(matches).unwrap();
+        let Command::Serve(args) = cli.command else {
+            panic!()
+        };
+        assert_eq!(args.origin, "http://localhost:8888");
+        assert!(!args.control_allow_remote);
+        assert_eq!(metadata["host.origin"].source, Source::Cli);
+        assert_eq!(
+            metadata["host.origin"].saved,
+            Some(serde_json::json!("http://localhost:9999"))
+        );
     }
 
     #[test]

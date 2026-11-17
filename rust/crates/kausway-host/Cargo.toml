@@ -34,3 +34,5 @@ tokio-util.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 kausway-client.workspace = true
+
+kausway-config.workspace = true
