@@ -2,7 +2,7 @@
 
 The `kausway-config` crate supplies the schema, platform paths, private filesystem
 helpers, configuration revisions and diagnostic metadata for the host and future
-manager/admin. Manager and admin executables are not implemented in this phase.
+manager/admin. The manager is now implemented in Phase 2; see [manager operations](../operations/manager.md). The admin executable remains planned.
 
 ## Host use
 
@@ -72,8 +72,9 @@ The shared metadata describes startup resolution; it is not a live host snapshot
 An admin API must combine it with authoritative host state in a later phase.
 Unknown fields and unsupported schema versions fail. Control tokens remain in
 protected host state or explicit runtime overrides, never saved settings.
-Manager/admin sections reserve validated configuration for later phases; their
-presence does not launch those services.
+The manager reads its settings when explicitly launched. The admin section
+provides configuration for the optional launch hook; the web server is a later phase.
+Configuration alone never starts a process.
 
 ## Persistence and security
 
@@ -106,7 +107,7 @@ secrets for protected persistence and must not be returned directly by an API.
 | Identity and paired devices | Managed state | Host |
 | Invitations, cancellation, revocation | Existing immediate operations | Host |
 | Session/path diagnostics | Read-only live information | Host |
-| Manager desired state/restart policy | Future manager settings | Manager |
+| Manager desired state/restart policy | Managed by the optional manager | Manager |
 | Admin listener | Restart | Admin |
 | Admin credentials | Future credential workflow; invalidate sessions | Admin |
 

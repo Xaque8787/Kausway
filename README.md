@@ -18,7 +18,7 @@ through the Android SDK or development CLI. Jellyfin is the reference server int
 
 | Directory | Purpose |
 |---|---|
-| `rust/` | Rust workspace: transport, host, shared client engine and Android JNI adapter |
+| `rust/` | Rust workspace: transport, host, configuration, manager, shared client engine and Android JNI adapter |
 | `sdks/android/` | Kotlin SDK, Gradle wrapper and Android build configuration |
 | `examples/android-basic/` | Example consuming the built AAR; included as Gradle project `:sample` |
 | `integrations/jellyfin/` | Reference plugin, tests and pinned .NET SDK |
@@ -56,4 +56,5 @@ planned separately. The future standalone deployment will live in `deploy/standa
 
 Shared suite configuration and platform storage defaults are described in
 [configuration and storage](docs/architecture/configuration-and-storage.md).
-Manager and admin execution remain planned subsequent phases.
+The optional manager is implemented: see [manager operations](docs/operations/manager.md).
+The admin web server remains a subsequent phase.

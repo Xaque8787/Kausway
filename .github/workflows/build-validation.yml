@@ -103,7 +103,8 @@ jobs:
         continue-on-error: true
         run: |
           set -eux
-          cargo build ${{ steps.lock.outputs.flag }} -p kausway-host
+          cargo build ${{ steps.lock.outputs.flag }} -p kausway-host -p kausway-manager
+          python3 ../scripts/ci/manager-smoke.py target/debug
           ./target/debug/kausway-host --version
           id_first=$(./target/debug/kausway-host identity --data-dir "$RUNNER_TEMP/smoke")
           id_second=$(./target/debug/kausway-host identity --data-dir "$RUNNER_TEMP/smoke")

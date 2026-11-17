@@ -71,6 +71,10 @@ pub struct Manager {
     pub host_enabled: bool,
     pub shutdown_timeout_secs: u64,
     pub restart_on_failure: bool,
+    pub restart_backoff_initial_secs: u64,
+    pub restart_backoff_max_secs: u64,
+    pub max_failures: u32,
+    pub readiness_timeout_secs: u64,
 }
 impl Default for Manager {
     fn default() -> Self {
@@ -78,6 +82,10 @@ impl Default for Manager {
             host_enabled: false,
             shutdown_timeout_secs: 15,
             restart_on_failure: true,
+            restart_backoff_initial_secs: 1,
+            restart_backoff_max_secs: 30,
+            max_failures: 5,
+            readiness_timeout_secs: 30,
         }
     }
 }
@@ -114,8 +122,21 @@ impl Config {
         if self.schema_version != 1 {
             return Err(invalid("schema_version must be 1"));
         }
-        if self.manager.shutdown_timeout_secs == 0 {
-            return Err(invalid("manager.shutdown_timeout_secs must be positive"));
+        if !(1..=120).contains(&self.manager.shutdown_timeout_secs) {
+            return Err(invalid(
+                "manager.shutdown_timeout_secs must be between 1 and 120",
+            ));
+        }
+        if self.manager.restart_backoff_initial_secs == 0
+            || self.manager.restart_backoff_max_secs < self.manager.restart_backoff_initial_secs
+            || self.manager.max_failures == 0
+            || !(1..=300).contains(&self.manager.readiness_timeout_secs)
+            || self.manager.restart_backoff_max_secs > 3600
+            || self.manager.max_failures > 100
+        {
+            return Err(invalid(
+                "manager requires readiness_timeout_secs 1..300, max_failures 1..100 and positive backoff bounds with initial <= max <= 3600",
+            ));
         }
         let listen: std::net::SocketAddr = self
             .admin

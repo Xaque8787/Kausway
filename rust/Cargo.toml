@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "crates/kausway-config",
+    "crates/kausway-manager",
     "crates/kausway-transport",
     "crates/kausway-host",
     "crates/kausway-client",

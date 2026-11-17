@@ -35,17 +35,26 @@ impl Cli {
     fn resolve_matches(matches: clap::ArgMatches) -> Result<(Self, Settings), String> {
         let mut cli = Self::from_arg_matches(&matches).map_err(|e| e.to_string())?;
         let (name, sub) = matches.subcommand().ok_or("missing command")?;
-        let paths = Paths::defaults().map_err(|e| e.to_string())?;
         let data = match &mut cli.command {
             Command::Serve(a) | Command::Doctor(a) => &mut a.data,
             Command::Identity(a) | Command::Devices(a) => a,
             Command::Invite(a) => &mut a.data,
             Command::Revoke(a) => &mut a.data,
         };
-        if sub.value_source("data_dir") == Some(clap::parser::ValueSource::DefaultValue) {
-            data.data_dir = paths.component(Component::Host);
+        let default_data =
+            sub.value_source("data_dir") == Some(clap::parser::ValueSource::DefaultValue);
+        let paths = if default_data || data.config.is_none() {
+            Some(Paths::defaults().map_err(|e| e.to_string())?)
+        } else {
+            None
+        };
+        if default_data {
+            data.data_dir = paths.as_ref().unwrap().component(Component::Host);
         }
-        let config_path = data.config.clone().unwrap_or(paths.config);
+        let config_path = data
+            .config
+            .clone()
+            .unwrap_or_else(|| paths.as_ref().unwrap().config.clone());
         let saved = Store::new(&config_path)
             .load_or_create()
             .map_err(|e| e.to_string())?
