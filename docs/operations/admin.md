@@ -2,8 +2,9 @@
 
 `kausway-admin` contains an embedded web frontend and local authentication server.
 This phase provides first-run setup, sign-in/out, and administrator credential
-changes. Host settings and lifecycle screens are Phase 4 work. No Node runtime or
-separate frontend server is needed.
+changes. Phase 4 adds [host administration](host-administration.md), including
+settings, invitations, devices, sessions and manager-backed lifecycle controls.
+No Node runtime or separate frontend server is needed.
 
 ## Build and start
 
@@ -34,7 +35,7 @@ that setting controls manager launch behavior.
 | `--data-dir` | `KAUSWAY_ADMIN_DATA_DIR` | Platform data root + `admin/` |
 | `--listen` | `KAUSWAY_ADMIN_LISTEN` | `admin.listen` |
 | `--browser-base-url` | `KAUSWAY_ADMIN_BROWSER_BASE_URL` | `admin.browser_base_url` |
-| `--manager-socket` | — | Supplied by the manager; reserved for Phase 4 controls |
+| `--manager-socket` | — | Supplied by the manager for verified lifecycle controls |
 
 A single admin process owns its component directory using `admin.lock`.
 

@@ -214,7 +214,13 @@ async fn uncooperative_child_is_killed_and_reaped() {
     let mut h = Harness::new("ignore_term");
     h.launch(&["--host-enabled"]).await;
     h.state("running").await;
-    request(&h.root, "host.stop").await.unwrap();
+    let root = h.root.clone();
+    let stopping = tokio::spawn(async move { request(&root, "host.stop").await });
+    let status = tokio::time::timeout(Duration::from_millis(700), h.state("stopping"))
+        .await
+        .expect("status must remain responsive during graceful stop");
+    assert_eq!(status["desired"], "disabled");
+    stopping.await.unwrap().unwrap();
     let status = h.state("stopped").await;
     assert!(
         status["diagnostics"]

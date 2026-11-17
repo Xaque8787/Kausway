@@ -15,6 +15,7 @@ use tokio::{net::TcpListener, sync::Semaphore};
 #[derive(Clone)]
 pub struct Shared {
     pub state: Arc<Mutex<State>>,
+    pub operations: Option<Arc<crate::operations::Operations>>,
     workers: Arc<Semaphore>,
     pub base: String,
     authorities: Arc<Vec<String>>,
@@ -45,6 +46,7 @@ impl Shared {
         ];
         Ok(Self {
             state: Arc::new(Mutex::new(state)),
+            operations: None,
             workers: Arc::new(Semaphore::new(4)),
             base,
             authorities: Arc::new(authorities),
@@ -149,6 +151,27 @@ async fn route(request: Request<Incoming>, shared: Shared) -> Response<Full<Byte
                 "text/css; charset=utf-8",
                 include_str!("assets/style.css"),
             ),
+            "/api/overview" | "/api/config" => {
+                let auth_cookie = cookie.clone().unwrap_or_default();
+                if let Err(e) = shared
+                    .work(move |s| s.check_session(&auth_cookie, None))
+                    .await
+                {
+                    return error(e);
+                }
+                let Some(operations) = &shared.operations else {
+                    return error((503, "Host administration is not configured."));
+                };
+                let result = if path == "/api/config" {
+                    operations.configuration().await
+                } else {
+                    operations.overview().await
+                };
+                match result {
+                    Ok(value) => json_response(200, value),
+                    Err((status, message)) => json_response(status, json!({"error":message})),
+                }
+            }
             "/" | "/api/status" | "/admin" => {
                 match shared.work(move |s| s.status(cookie.as_deref())).await {
                     Ok(status) if path == "/api/status" => {
@@ -216,6 +239,40 @@ async fn route(request: Request<Incoming>, shared: Shared) -> Response<Full<Byte
         Ok(Ok(body)) => body.to_bytes(),
         _ => return error((413, "Request body is too large or incomplete.")),
     };
+    if matches!(
+        path.as_str(),
+        "/api/config/save"
+            | "/api/config/apply"
+            | "/api/config/save-restart"
+            | "/api/lifecycle"
+            | "/api/invitations/create"
+            | "/api/invitations/cancel"
+            | "/api/devices/revoke"
+    ) {
+        let value: Value = match serde_json::from_slice(&body) {
+            Ok(v) => v,
+            Err(_) => return error((400, "Invalid JSON request.")),
+        };
+        let csrf = value
+            .get("csrf")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
+        let auth_cookie = cookie.unwrap_or_default();
+        if let Err(e) = shared
+            .work(move |s| s.check_session(&auth_cookie, Some(&csrf)))
+            .await
+        {
+            return error(e);
+        }
+        let Some(operations) = &shared.operations else {
+            return error((503, "Host administration is not configured."));
+        };
+        return match operations.mutate(&path, value).await {
+            Ok(value) => json_response(200, value),
+            Err((status, message)) => json_response(status, json!({"error":message})),
+        };
+    }
     let input: Input = match serde_json::from_slice(&body) {
         Ok(i) => i,
         Err(_) => return error((400, "Invalid JSON request.")),
@@ -296,7 +353,8 @@ pub async fn serve(
                         let shared = shared.clone();
                         async move { Ok::<_, std::convert::Infallible>(route(request, shared).await) }
                     });
-                    let _ = tokio::time::timeout(Duration::from_secs(30), hyper::server::conn::http1::Builder::new()
+                    let _ = tokio::time::timeout(Duration::from_secs(150), hyper::server::conn::http1::Builder::new()
+                        .timer(hyper_util::rt::TokioTimer::new()).header_read_timeout(Duration::from_secs(10)).max_headers(64)
                         .max_buf_size(16 * 1024).keep_alive(false).serve_connection(TokioIo::new(stream), service)).await;
                 });
             }

@@ -1,4 +1,5 @@
 //! Shared suite configuration, paths and revision-checked persistence.
+pub mod administration;
 pub mod fsutil;
 
 use fsutil::{ensure_private_dir, restrict_permissions, write_private_atomic};
@@ -65,9 +66,19 @@ pub struct Control {
     pub listen: Option<String>,
     pub allow_remote: Option<bool>,
 }
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RestartPolicy {
+    #[default]
+    Host,
+    Application,
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Manager {
+    pub restart_policy: RestartPolicy,
+    pub application_name: String,
     pub host_enabled: bool,
     pub shutdown_timeout_secs: u64,
     pub restart_on_failure: bool,
@@ -80,6 +91,8 @@ impl Default for Manager {
     fn default() -> Self {
         Self {
             host_enabled: false,
+            restart_policy: RestartPolicy::Host,
+            application_name: "application".into(),
             shutdown_timeout_secs: 15,
             restart_on_failure: true,
             restart_backoff_initial_secs: 1,
@@ -120,6 +133,23 @@ impl Config {
         if let Some(origin) = &self.host.origin {
             kausway_transport::proxy::Origin::parse(origin)
                 .map_err(|_| invalid("host.origin must be a valid plain HTTP origin"))?;
+        }
+        if let Some(relay) = &self.host.relay_url
+            && !relay.trim().is_empty()
+            && relay.trim() != "none"
+        {
+            relay
+                .trim()
+                .parse::<iroh::RelayUrl>()
+                .map_err(|_| invalid("host.relay_url must be a valid relay URL, empty, or none"))?;
+        }
+        if self.manager.application_name.trim().is_empty()
+            || self.manager.application_name.len() > 128
+            || self.manager.application_name.chars().any(char::is_control)
+        {
+            return Err(invalid(
+                "manager.application_name must contain 1–128 bytes without control characters",
+            ));
         }
         if self.schema_version != 1 {
             return Err(invalid("schema_version must be 1"));
@@ -290,6 +320,8 @@ pub enum Source {
     Environment,
     File,
     Default,
+    State,
+    Unavailable,
 }
 #[derive(Debug, Clone, Copy, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -329,7 +361,7 @@ pub fn setting(
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Revision([u8; 32]);
 pub struct Snapshot {
     pub config: Config,
@@ -392,6 +424,20 @@ impl Store {
             revision: Revision(Sha256::digest(&bytes).into()),
         })
     }
+    /// Hold the shared config lock through a revision-checked external state update.
+    pub fn with_revision<T>(
+        &self,
+        expected: &Revision,
+        operation: impl FnOnce() -> Result<T, Error>,
+    ) -> Result<T, Error> {
+        let _lock = self.lock()?;
+        let bytes = fs::read(&self.path)?;
+        if Revision(Sha256::digest(&bytes).into()) != *expected {
+            return Err(Error::Conflict);
+        }
+        operation()
+    }
+
     pub fn save(&self, config: &Config, expected: &Revision) -> Result<Snapshot, Error> {
         config.validate()?;
         let _lock = self.lock()?;

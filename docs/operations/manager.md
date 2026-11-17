@@ -195,3 +195,15 @@ intentional stop, persistence, concurrent starts, malformed requests, forced
 shutdown, duplicate-manager protection, external-host refusal, diagnostics
 redaction, and admin survival while host is stopped. The smoke test exercises the
 actual host, including identity preservation and refusal to stop an external host.
+
+## Phase 4 integration
+
+See [host administration](host-administration.md) for the UI, configuration API,
+application-restart policy and ownership checks. Manager status now includes its
+selected configuration/host directory, actual owned listener, effective manager
+settings and launch sources. Status is served independently of serialized lifecycle
+work so it remains responsive during graceful stop.
+
+The manager preserves the control listener's CLI/environment/file/default source
+in the child. An internal managed-host guard enforces loopback-only binding rather
+than turning saved listener settings into artificial CLI overrides.

@@ -1,4 +1,4 @@
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand};
 use kausway_config::Paths;
 use std::{path::PathBuf, process::ExitCode};
 
@@ -34,8 +34,38 @@ struct Location {
 }
 #[tokio::main]
 async fn main() -> ExitCode {
-    let result = match Cli::parse().command {
-        Command::Run(args) => kausway_manager::run(*args).await,
+    let matches = Cli::command().get_matches();
+    let cli = Cli::from_arg_matches(&matches).expect("validated command line");
+    let result = match cli.command {
+        Command::Run(mut args) => {
+            if let Some((_, sub)) = matches.subcommand() {
+                for id in [
+                    "restart_policy",
+                    "admin_ui",
+                    "control_listen",
+                    "application_name",
+                    "host_enabled",
+                    "shutdown_timeout_secs",
+                    "restart_on_failure",
+                    "restart_backoff_initial_secs",
+                    "restart_backoff_max_secs",
+                    "max_failures",
+                    "readiness_timeout_secs",
+                ] {
+                    if let Some(source) = sub.value_source(id) {
+                        args.sources.insert(
+                            id.into(),
+                            if source == clap::parser::ValueSource::CommandLine {
+                                kausway_config::Source::Cli
+                            } else {
+                                kausway_config::Source::Environment
+                            },
+                        );
+                    }
+                }
+            }
+            kausway_manager::run(*args).await
+        }
         other => {
             let (operation, location) = match other {
                 Command::Status(l) => ("status", l),

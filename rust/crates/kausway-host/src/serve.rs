@@ -71,7 +71,7 @@ pub async fn run(
         Arc::new(StateRegistry::new(state.clone())),
     );
     if let Some(control) = &config.control {
-        let context = ControlContext::new(
+        let mut context = ControlContext::new(
             state,
             service.sessions(),
             Box::new({
@@ -83,6 +83,15 @@ pub async fn run(
             policy == TransportPolicy::RelayOnly,
             &load_or_create_token(&config.data_dir, control.token.as_deref())?,
         );
+        context.configuration =
+            config
+                .config_path
+                .clone()
+                .map(|path| crate::configuration::Configuration {
+                    path,
+                    data_dir: config.data_dir.clone(),
+                    startup: config.startup_settings.clone(),
+                });
         start_control(control, &config.data_dir, context, shutdown.clone()).await?;
     }
     tokio::spawn(stop_on_signal(shutdown.clone()));
@@ -106,6 +115,12 @@ async fn start_control(
                 control.listen
             )
         })?;
+    write_private_atomic(
+        &data_dir.join("control-address.json"),
+        &serde_json::to_vec(&serde_json::json!({"listen": control.listen}))
+            .map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| format!("could not publish local control listener: {e}"))?;
     let token_source = if control.token.is_some() {
         "KAUSWAY_CONTROL_TOKEN".to_owned()
     } else {

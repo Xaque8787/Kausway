@@ -1627,6 +1627,8 @@ dependencies = [
 name = "kausway-config"
 version = "0.4.0"
 dependencies = [
+ "http",
+ "iroh",
  "kausway-transport",
  "serde",
  "serde_json",

@@ -71,6 +71,9 @@ struct Supervisor {
     host_binary: PathBuf,
     admin_binary: PathBuf,
     policy: Manager,
+    manager_sources: std::collections::BTreeMap<String, kausway_config::Source>,
+    admin_enabled: bool,
+    admin_source: kausway_config::Source,
     enabled: bool,
     observed: Observed,
     host: Option<OwnedHost>,
@@ -79,6 +82,7 @@ struct Supervisor {
     failures: u32,
     retry: Option<Instant>,
     events: VecDeque<String>,
+    published: Arc<std::sync::Mutex<Value>>,
 }
 impl Supervisor {
     fn event(&mut self, message: impl Into<String>) {
@@ -97,9 +101,19 @@ impl Supervisor {
             self.events.pop_front();
         }
         self.events.push_back(message);
+        self.publish();
+    }
+    fn publish(&self) {
+        if let Ok(mut value) = self.published.lock() {
+            *value = self.status();
+        }
     }
     fn status(&self) -> Value {
-        json!({"protocol": 1, "desired": if self.enabled {"enabled"} else {"disabled"},
+        json!({"protocol": 1, "config_path": self.config, "host_data_dir": self.root.join("host"),
+            "control_address": self.host.as_ref().map(|h| h.address),
+            "restart_policy": self.policy.restart_policy, "application_name": self.policy.application_name,
+            "effective_manager": self.policy, "manager_sources": self.manager_sources, "admin_enabled": self.admin_enabled, "admin_source": self.admin_source,
+            "desired": if self.enabled {"enabled"} else {"disabled"},
             "host": {"observed": self.observed, "pid": self.host.as_ref().and_then(|h| h.child.id()),
                 "consecutive_failures": self.failures, "retry_in_ms": self.retry.map(|t| t.saturating_duration_since(Instant::now()).as_millis() as u64)},
             "admin": {"observed": self.admin_observed, "pid": self.admin.as_ref().and_then(|a| a.id())},
@@ -113,6 +127,7 @@ impl Supervisor {
             .save(&snapshot.config, &snapshot.revision)
             .map_err(|e| e.to_string())?;
         self.enabled = enabled;
+        self.publish();
         Ok(())
     }
     fn launch_host(&mut self) -> Result<(), String> {
@@ -124,6 +139,7 @@ impl Supervisor {
             .map_err(|e| e.to_string())?
             .config;
         self.policy = policy(&self.args, saved.manager)?;
+        self.manager_sources = manager_sources(&self.args, &self.config);
         let address: SocketAddr = self
             .args
             .control_listen
@@ -154,10 +170,11 @@ impl Supervisor {
             .arg(&self.config)
             .arg("--data-dir")
             .arg(&host_dir)
-            .arg("--control-listen")
-            .arg(address.to_string())
-            .arg("--control-allow-remote=false")
+            .arg("--managed")
             .env("KAUSWAY_CONTROL_TOKEN", &token);
+        if self.args.sources.get("control_listen") == Some(&kausway_config::Source::Cli) {
+            command.arg("--control-listen").arg(address.to_string());
+        }
         for (flag, value) in [
             ("--origin", &self.args.origin),
             ("--relay-url", &self.args.relay_url),
@@ -209,13 +226,22 @@ impl Supervisor {
         self.retry = None;
         if let Some(mut host) = self.host.take() {
             self.observed = Observed::Stopping;
+            self.publish();
             let result = terminate(
                 &mut host.child,
                 Duration::from_secs(self.policy.shutdown_timeout_secs),
             )
             .await;
             self.observed = Observed::Stopped;
-            if result? {
+            let forced = match result {
+                Ok(value) => value,
+                Err(error) => {
+                    self.observed = Observed::Failed;
+                    self.event("host shutdown failed");
+                    return Err(error);
+                }
+            };
+            if forced {
                 self.event("host exceeded shutdown timeout and was forcibly terminated");
             } else {
                 self.event("host stopped and reaped");
@@ -223,6 +249,7 @@ impl Supervisor {
         } else {
             self.observed = Observed::Stopped;
         }
+        self.publish();
         Ok(())
     }
     async fn tick(&mut self) -> Result<(), String> {
@@ -302,6 +329,26 @@ impl Supervisor {
     }
 }
 
+fn manager_sources(
+    args: &RunArgs,
+    config: &Path,
+) -> std::collections::BTreeMap<String, kausway_config::Source> {
+    serde_json::to_value(Manager::default())
+        .unwrap()
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(|key| {
+            (
+                key.clone(),
+                args.sources.get(key).copied().unwrap_or_else(|| {
+                    kausway_config::administration::file_source(config, &format!("manager.{key}"))
+                }),
+            )
+        })
+        .collect()
+}
+
 fn policy(args: &RunArgs, mut saved: Manager) -> Result<Manager, String> {
     macro_rules! override_value {
         ($field:ident) => {
@@ -309,6 +356,16 @@ fn policy(args: &RunArgs, mut saved: Manager) -> Result<Manager, String> {
                 saved.$field = value;
             }
         };
+    }
+    if let Some(value) = &args.restart_policy {
+        saved.restart_policy = if value == "application" {
+            kausway_config::RestartPolicy::Application
+        } else {
+            kausway_config::RestartPolicy::Host
+        };
+    }
+    if let Some(value) = &args.application_name {
+        saved.application_name = value.clone();
     }
     override_value!(shutdown_timeout_secs);
     override_value!(restart_on_failure);
@@ -493,12 +550,22 @@ async fn read_message(stream: &mut (impl tokio::io::AsyncRead + Unpin)) -> Resul
     }
     Ok(bytes)
 }
-async fn peer(mut stream: UnixStream, calls: mpsc::Sender<Call>) {
+async fn peer(
+    mut stream: UnixStream,
+    calls: mpsc::Sender<Call>,
+    published: Arc<std::sync::Mutex<Value>>,
+) {
     let (written, when_written) = oneshot::channel();
     let response = async {
         let bytes = read_message(&mut stream).await?;
         let request: Request =
             serde_json::from_slice(&bytes).map_err(|_| "invalid request".to_string())?;
+        if request.operation == "status" {
+            return published
+                .lock()
+                .map(|value| json!({"ok":true,"status":value.clone()}))
+                .map_err(|_| "Manager status unavailable".to_string());
+        }
         let (reply, receive) = oneshot::channel();
         calls
             .send(Call {
@@ -616,6 +683,11 @@ pub async fn run(args: RunArgs) -> Result<(), String> {
         .clone()
         .unwrap_or_else(|| sibling.join("kausway-admin"));
     let policy = policy(&args, saved.manager)?;
+    let sources = manager_sources(&args, &config);
+    let admin_source =
+        args.sources.get("admin_ui").copied().unwrap_or_else(|| {
+            kausway_config::administration::file_source(&config, "admin.enabled")
+        });
     let mut supervisor = Supervisor {
         args,
         config,
@@ -623,6 +695,9 @@ pub async fn run(args: RunArgs) -> Result<(), String> {
         host_binary,
         admin_binary,
         policy,
+        manager_sources: sources,
+        admin_enabled,
+        admin_source,
         enabled,
         observed: Observed::Stopped,
         host: None,
@@ -631,6 +706,7 @@ pub async fn run(args: RunArgs) -> Result<(), String> {
         failures: 0,
         retry: None,
         events: VecDeque::new(),
+        published: Arc::new(std::sync::Mutex::new(Value::Null)),
     };
     if admin_enabled {
         ensure_private_dir(&supervisor.root.join("admin")).map_err(|e| e.to_string())?;
@@ -642,6 +718,8 @@ pub async fn run(args: RunArgs) -> Result<(), String> {
             .arg(supervisor.root.join("admin"))
             .arg("--manager-socket")
             .arg(&socket_path)
+            .arg("--host-data-dir")
+            .arg(supervisor.root.join("host"))
             .env("KAUSWAY_ADMIN_STARTUP_EVENTS", "1");
         supervisor.admin =
             Some(spawn_child(&mut command, true).map_err(|e| format!("cannot launch admin: {e}"))?);
@@ -654,6 +732,24 @@ pub async fn run(args: RunArgs) -> Result<(), String> {
     supervisor.event("manager control ready");
     let (send, mut receive) = mpsc::channel::<Call>(32);
     let slots = Arc::new(Semaphore::new(32));
+    let (stop_listener, mut listener_stopped) = tokio::sync::watch::channel(false);
+    let published = supervisor.published.clone();
+    let accept_send = send.clone();
+    let mut accept_task = tokio::spawn(async move {
+        loop {
+            tokio::select! {
+                _ = listener_stopped.changed() => return Ok::<(), String>(()),
+                result = listener.accept() => {
+                    let (stream,_) = result.map_err(|e| e.to_string())?;
+                    if stream.peer_cred().map(|c| c.uid()).ok() != Some(unsafe { libc::geteuid() }) { continue; }
+                    if let Ok(permit) = slots.clone().try_acquire_owned() {
+                        let send = accept_send.clone(); let published = published.clone();
+                        tokio::spawn(async move { let _permit = permit; peer(stream,send,published).await; });
+                    }
+                }
+            }
+        }
+    });
     let mut tick = tokio::time::interval(Duration::from_millis(100));
     let result = loop {
         tokio::select! {
@@ -672,19 +768,14 @@ pub async fn run(args: RunArgs) -> Result<(), String> {
                     break Ok(());
                 }
             }
-            result = listener.accept() => match result {
-                Ok((stream, _)) => {
-                    // Socket mode and parent directory restrict access; additionally enforce UID.
-                    if stream.peer_cred().map(|c| c.uid()).ok() != Some(unsafe { libc::geteuid() }) { continue; }
-                    if let Ok(permit) = slots.clone().try_acquire_owned() {
-                        let send = send.clone(); tokio::spawn(async move { let _permit = permit; peer(stream, send).await; });
-                    }
-                }
-                Err(e) => break Err(e.to_string()),
-            },
+            result = &mut accept_task => break result.map_err(|e| e.to_string()).and_then(|v| v),
             _ = tick.tick() => if let Err(e) = supervisor.tick().await { break Err(e); },
         }
     };
     let shutdown_result = supervisor.shutdown().await;
+    let _ = stop_listener.send(true);
+    if !accept_task.is_finished() {
+        let _ = accept_task.await;
+    }
     result.and(shutdown_result)
 }

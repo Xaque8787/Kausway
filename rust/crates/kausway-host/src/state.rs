@@ -163,6 +163,26 @@ impl HostState {
         })
     }
 
+    /// Apply validated live configuration together in one state persistence operation.
+    pub fn set_live_configuration(
+        &self,
+        policy: Option<TransportPolicy>,
+        enabled: Option<bool>,
+        origin: Option<OriginHeader>,
+    ) -> Result<(), StateError> {
+        self.update(|file| {
+            if let Some(policy) = policy {
+                file.policy = policy;
+            }
+            if let Some(enabled) = enabled {
+                file.websocket.enabled = enabled;
+            }
+            if let Some(origin) = origin {
+                file.websocket.origin_header = origin;
+            }
+        })
+    }
+
     pub fn is_authorized(&self, endpoint_id: &str) -> bool {
         self.lock()
             .devices

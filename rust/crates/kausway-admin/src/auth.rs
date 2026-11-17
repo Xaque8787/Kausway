@@ -295,6 +295,17 @@ impl State {
         }
         Ok(snapshot)
     }
+    pub fn check_session(&mut self, cookie: &str, csrf: Option<&str>) -> Result<()> {
+        let status = self.status(Some(cookie))?;
+        if !status.authenticated {
+            return Err((401, "Sign in to administer the host."));
+        }
+        if let Some(csrf) = csrf {
+            self.authorize(cookie, csrf)?;
+        }
+        Ok(())
+    }
+
     pub fn logout(&mut self, cookie: &str, csrf: &str) -> Result<()> {
         self.authorize(cookie, csrf)?;
         self.sessions.remove(&digest(cookie));

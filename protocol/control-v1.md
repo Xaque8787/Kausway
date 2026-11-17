@@ -147,3 +147,30 @@ Request: `{"enabled":true|false,"origin_header":"rewrite|pass_through"}`. Both f
 The settings are saved in `state.json` and apply without a restart. A new WebSocket checks them when it opens, and open WebSockets re-check them every 2 seconds, so turning WebSockets off closes the open ones. Plain HTTP requests are never affected. `--websockets` / `KAUSWAY_WEBSOCKETS` and `--websocket-origin` / `KAUSWAY_WEBSOCKET_ORIGIN` override the saved values at every start.
 
 `status` includes the current `websocket` object, and each entry in `sessions` includes `active_websockets`.
+
+## Shared configuration extensions (Phase 4)
+
+The existing routes and wire behavior remain supported. Current standalone host
+launches additionally provide these authenticated routes:
+
+| Method | Route | Behavior |
+| --- | --- | --- |
+| GET | `/v1/config` | Safe saved/effective configuration, sources, opaque revision, pending overrides and storage paths |
+| PUT | `/v1/config` | `{revision, settings}`; validate and atomically save ordinary settings without applying |
+| POST | `/v1/config/apply` | `{revision}`; apply saved live policy/WebSocket settings with revision protection |
+
+`settings` contains host, manager and non-auth admin settings. It excludes
+credentials, tokens and state files. Changing manager desired host-enabled state
+through this route is rejected; lifecycle control belongs to the owning manager.
+Runtime overrides do not rewrite saved values. Config conflicts/validation failures
+return a configuration error rather than overwrite current settings. A host created
+without a shared configuration context reports that context as unavailable.
+
+Apply reports `saved`, `applied`, `applied_revision`, and `restart_required`.
+The configuration view also reports `transport_restart_required` when the live
+policy differs from endpoint construction. A changed saved live value overridden
+at launch is not applied. Relay-only without an enabled runtime relay is refused.
+
+The host's data directory now contains a private `control-address.json` publishing
+its current control listener. It contains no control token and is not a PID-based
+process adoption mechanism. The authenticated API remains the authority for state.

@@ -211,3 +211,31 @@ mod tests {
         assert!(DataDirLock::acquire(&dir.0).is_ok());
     }
 }
+
+/// A running host owns its selected config even if another interface selects the
+/// wrong component directory. Offline host-setting writers must take this lease.
+pub fn host_config_lease(config: &Path) -> io::Result<File> {
+    let name = config.file_name().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "configuration must name a file",
+        )
+    })?;
+    let lock = config.with_file_name(format!("{}.host.lock", name.to_string_lossy()));
+    let mut options = OpenOptions::new();
+    options.create(true).truncate(false).read(true).write(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let file = options.open(lock)?;
+    match file.try_lock() {
+        Ok(()) => Ok(file),
+        Err(TryLockError::WouldBlock) => Err(io::Error::new(
+            io::ErrorKind::WouldBlock,
+            "a running host owns this configuration",
+        )),
+        Err(TryLockError::Error(error)) => Err(error),
+    }
+}

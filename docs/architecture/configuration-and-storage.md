@@ -118,4 +118,5 @@ secrets for protected persistence and must not be returned directly by an API.
 | Admin listener | Restart | Admin |
 | Admin credentials | Account workflow; invalidate sessions | Admin |
 
-No new live configuration endpoints or lifecycle controls are added in Phase 1.
+Phase 1 established this foundation. Phase 4 now supplies authenticated configuration
+endpoints and [host administration](../operations/host-administration.md).

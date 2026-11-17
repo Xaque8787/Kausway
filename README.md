@@ -58,4 +58,5 @@ Shared suite configuration and platform storage defaults are described in
 [configuration and storage](docs/architecture/configuration-and-storage.md).
 The optional manager is implemented: see [manager operations](docs/operations/manager.md).
 The [admin server](docs/operations/admin.md) supports first-run account setup,
-login and credential recovery. Host administration screens remain a subsequent phase.
+login and credential recovery. [Host administration](docs/operations/host-administration.md)
+adds configuration, devices, invitations, sessions and manager-mediated lifecycle controls.

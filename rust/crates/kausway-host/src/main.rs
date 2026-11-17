@@ -18,8 +18,8 @@ use tracing_subscriber::EnvFilter;
 const ORIGIN_CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
 
 fn main() -> ExitCode {
-    let cli = match Cli::resolve() {
-        Ok((cli, _metadata)) => cli,
+    let (cli, metadata) = match Cli::resolve() {
+        Ok(resolved) => resolved,
         Err(error) => {
             eprintln!("error: {error}");
             return ExitCode::FAILURE;
@@ -28,7 +28,7 @@ fn main() -> ExitCode {
     let result = match cli.command {
         Command::Identity(args) => identity_command(&args),
         Command::Doctor(args) => return doctor(&args),
-        Command::Serve(args) => serve_command(&args),
+        Command::Serve(args) => serve_command(&args, metadata),
         Command::Invite(args) => invite_command(&args),
         Command::Devices(args) => devices_command(&args),
         Command::Revoke(args) => revoke_command(&args),
@@ -52,8 +52,15 @@ fn open_state(data: &DataArgs) -> Result<HostState, String> {
     HostState::open(&data.data_dir.join(STATE_FILE), None).map_err(|error| error.to_string())
 }
 
-fn serve_command(args: &RunArgs) -> Result<(), String> {
-    let config = args.validate().map_err(|problems| problems.join("; "))?;
+fn serve_command(args: &RunArgs, metadata: kausway_config::Settings) -> Result<(), String> {
+    let mut config = args.validate().map_err(|problems| problems.join("; "))?;
+    config.startup_settings = metadata;
+    let _configuration_lease = config
+        .config_path
+        .as_deref()
+        .map(kausway_config::fsutil::host_config_lease)
+        .transpose()
+        .map_err(|e| e.to_string())?;
     ensure_private_dir(&config.data_dir).map_err(|e| e.to_string())?;
     let _lock = DataDirLock::acquire(&config.data_dir).map_err(|error| error.to_string())?;
     let secret_key = prepare(&args.data)?;

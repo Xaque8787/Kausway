@@ -243,6 +243,9 @@ pub struct DataArgs {
 
 #[derive(Clone, Args)]
 pub struct RunArgs {
+    /// Internal suite boundary: reject non-loopback control listeners.
+    #[arg(long, hide = true)]
+    pub managed: bool,
     #[command(flatten)]
     pub data: DataArgs,
     /// Local HTTP service to forward requests to. Plain http:// only.
@@ -310,6 +313,8 @@ pub fn parse_relay(value: Option<&str>) -> Result<RelayChoice, String> {
 
 #[derive(Debug, Clone)]
 pub struct HostConfig {
+    pub config_path: Option<PathBuf>,
+    pub startup_settings: Settings,
     pub data_dir: PathBuf,
     pub origin: Origin,
     pub policy: Option<TransportPolicy>,
@@ -366,6 +371,12 @@ impl RunArgs {
             .flatten();
         match origin {
             Some(origin) if problems.is_empty() => Ok(HostConfig {
+                config_path: self
+                    .data
+                    .config
+                    .as_ref()
+                    .map(|p| std::fs::canonicalize(p).unwrap_or_else(|_| p.clone())),
+                startup_settings: Settings::new(),
                 data_dir: self.data.data_dir.clone(),
                 origin,
                 policy,
@@ -386,6 +397,9 @@ impl RunArgs {
         let listen: SocketAddr = listen.parse().map_err(|_| {
             format!("KAUSWAY_CONTROL_LISTEN: '{listen}' is not an ip:port address or 'off'")
         })?;
+        if !listen.ip().is_loopback() && self.managed {
+            return Err("Managed host control listeners must bind to loopback".into());
+        }
         if !listen.ip().is_loopback() && !self.control_allow_remote {
             return Err(format!(
                 "KAUSWAY_CONTROL_LISTEN: {listen} is not a loopback address; set KAUSWAY_CONTROL_ALLOW_REMOTE=true to allow it"
@@ -418,6 +432,7 @@ mod tests {
 
     fn args(origin: &str, policy: Option<&str>, relay: Option<&str>) -> RunArgs {
         RunArgs {
+            managed: false,
             data: DataArgs {
                 data_dir: "./data".into(),
                 config: None,

@@ -4,6 +4,12 @@ use std::path::PathBuf;
 
 #[derive(Clone, Args)]
 pub struct RunArgs {
+    #[arg(skip)]
+    pub sources: std::collections::BTreeMap<String, kausway_config::Source>,
+    #[arg(long, env = "KAUSWAY_RESTART_POLICY", value_parser = ["host", "application"])]
+    pub restart_policy: Option<String>,
+    #[arg(long, env = "KAUSWAY_APPLICATION_NAME")]
+    pub application_name: Option<String>,
     #[arg(long, env = "KAUSWAY_CONFIG")]
     pub config: Option<PathBuf>,
     /// Suite root: contains host/, manager/ and admin/ (not a host component directory).

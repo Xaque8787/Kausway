@@ -1,4 +1,4 @@
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, CommandFactory, FromArgMatches, Parser, Subcommand};
 use kausway_admin::{
     auth::State,
     server::{Shared, serve},
@@ -28,9 +28,19 @@ struct Cli {
     listen: Option<SocketAddr>,
     #[arg(long, env = "KAUSWAY_ADMIN_BROWSER_BASE_URL")]
     browser_base_url: Option<String>,
-    /// Local manager endpoint; host controls are implemented in Phase 4.
+    /// Local manager endpoint for verified host lifecycle controls.
     #[arg(long)]
     manager_socket: Option<PathBuf>,
+    #[arg(long, env = "KAUSWAY_ADMIN_HOST_DATA_DIR")]
+    host_data_dir: Option<PathBuf>,
+    #[arg(long, env = "KAUSWAY_ADMIN_HOST_CONTROL_LISTEN")]
+    host_control_listen: Option<SocketAddr>,
+    #[arg(long, env = "KAUSWAY_CONTROL_TOKEN", hide_env_values = true)]
+    host_control_token: Option<String>,
+    #[arg(long, env="KAUSWAY_ADMIN_RESTART_POLICY", value_parser=["host", "application"], default_value="application")]
+    restart_policy: String,
+    #[arg(long, env = "KAUSWAY_APPLICATION_NAME", default_value = "application")]
+    application_name: String,
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -123,7 +133,25 @@ fn credentials(args: CredentialArgs) -> Result<(String, String), String> {
 }
 #[tokio::main]
 async fn main() -> ExitCode {
-    match run(Cli::parse()).await {
+    let matches = Cli::command().get_matches();
+    let cli = Cli::from_arg_matches(&matches).expect("validated command line");
+    let sources: std::collections::BTreeMap<String, kausway_config::Source> =
+        ["listen", "browser_base_url"]
+            .iter()
+            .filter_map(|key| {
+                matches.value_source(key).map(|source| {
+                    (
+                        key.to_string(),
+                        if source == clap::parser::ValueSource::CommandLine {
+                            kausway_config::Source::Cli
+                        } else {
+                            kausway_config::Source::Environment
+                        },
+                    )
+                })
+            })
+            .collect();
+    match run(cli, sources).await {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
             eprintln!("error: {e}");
@@ -131,7 +159,10 @@ async fn main() -> ExitCode {
         }
     }
 }
-async fn run(cli: Cli) -> Result<(), String> {
+async fn run(
+    cli: Cli,
+    sources: std::collections::BTreeMap<String, kausway_config::Source>,
+) -> Result<(), String> {
     let defaults = if cli.config.is_none() || cli.data_dir.is_none() {
         Some(Paths::defaults().map_err(|e| e.to_string())?)
     } else {
@@ -242,7 +273,27 @@ async fn run(cli: Cli) -> Result<(), String> {
         .unwrap_or(default_base)
         .trim_end_matches('/')
         .to_string();
-    let shared = Shared::new(state, base.clone(), actual)?;
+    let mut shared = Shared::new(state, base.clone(), actual)?;
+    let host_data = cli
+        .host_data_dir
+        .unwrap_or_else(|| data.parent().unwrap_or(Path::new(".")).join("host"));
+    shared.operations = Some(std::sync::Arc::new(
+        kausway_admin::operations::Operations::new(
+            config.clone(),
+            data.clone(),
+            host_data,
+            cli.host_control_listen,
+            cli.host_control_token,
+            cli.manager_socket,
+            cli.restart_policy,
+            cli.application_name,
+            serde_json::json!({
+                "admin.listen": {"value": actual.to_string(), "source": sources.get("listen").copied().unwrap_or_else(|| kausway_config::administration::file_source(&config, "admin.listen"))},
+                "admin.browser_base_url": {"value": base, "source": sources.get("browser_base_url").copied().unwrap_or_else(|| kausway_config::administration::file_source(&config, "admin.browser_base_url"))},
+                "admin.enabled": {"value": true, "source": "cli"}
+            }),
+        ),
+    ));
     #[cfg(unix)]
     let local_listener = kausway_admin::local::bind(&data.join("control.sock"))?;
     if !shared

@@ -69,6 +69,7 @@ pub fn load_or_create_token(data_dir: &Path, configured: Option<&str>) -> Result
 }
 
 pub struct ControlContext {
+    pub configuration: Option<crate::configuration::Configuration>,
     pub state: Arc<HostState>,
     pub sessions: Arc<SessionTable>,
     /// The endpoint's current address. A closure so tests need no live endpoint.
@@ -92,6 +93,7 @@ impl ControlContext {
         token: &str,
     ) -> Self {
         Self {
+            configuration: None,
             state,
             sessions,
             addr,
@@ -208,7 +210,7 @@ pub struct Reply {
 }
 
 impl Reply {
-    fn json(status: StatusCode, body: Value) -> Self {
+    pub(crate) fn json(status: StatusCode, body: Value) -> Self {
         Self {
             status,
             body: Some(body),
@@ -222,7 +224,7 @@ impl Reply {
         }
     }
 
-    fn error(status: StatusCode, code: &str, message: &str) -> Self {
+    pub(crate) fn error(status: StatusCode, code: &str, message: &str) -> Self {
         Self::json(status, json!({"error": {"code": code, "message": message}}))
     }
 
@@ -314,6 +316,9 @@ pub fn route(
         );
     }
     let result = match (rest, method) {
+        (["config"], "GET") => crate::configuration::read(context),
+        (["config"], "PUT") => crate::configuration::save(context, body),
+        (["config", "apply"], "POST") => crate::configuration::apply(context, body),
         (["status"], "GET") => Ok(status(context)),
         (["sessions"], "GET") => Ok(Reply::json(
             StatusCode::OK,
@@ -326,7 +331,14 @@ pub fn route(
         (["invitations", id], "DELETE") => cancel_invitation(context, id),
         (["policy"], "PUT") => set_policy(context, body),
         (["websocket"], "PUT") => set_websocket(context, body),
-        (["status" | "sessions" | "devices" | "invitations" | "policy" | "websocket"], _)
+        (
+            [
+                "config" | "status" | "sessions" | "devices" | "invitations" | "policy"
+                | "websocket",
+            ],
+            _,
+        )
+        | (["config", "apply"], _)
         | (["devices" | "invitations", _], _) => Err(Reply::method_not_allowed()),
         _ => Err(Reply::not_found("unknown control API path")),
     };
