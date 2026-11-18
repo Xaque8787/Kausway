@@ -34,9 +34,11 @@ DOCS = ['docs/architecture/configuration-and-storage.md', 'docs/android/storage.
         'docs/operations/admin.md', 'docs/operations/manager.md', 'docs/operations/host-administration.md',
         'docs/operations/cli-reference.md', 'docs/operations/development-binaries.md',
         'docs/architecture/transport-policies.md', 'docs/integrations/application-suite.md',
+        'docs/integrations/docker-suite.md',
         'protocol/control-v1.md', 'protocol/transport-v1.md']
 EXAMPLES = ['examples/application-integration/README.md', 'examples/application-integration/application.py',
-            'examples/application-integration/kausway.py']
+            'examples/application-integration/kausway.py', 'examples/docker-integration/Dockerfile',
+            'examples/docker-integration/entrypoint.sh', 'examples/docker-integration/supervise.py']
 
 
 def sha256(path):

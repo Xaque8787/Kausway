@@ -37,10 +37,11 @@ packages must instead have an Android linker and the matching ELF architecture.
 A 64-bit CPU with a 32-bit Android userland needs the 32-bit Android build.
 Linux and Android executables are not interchangeable.
 
-The Android SDK emulator pairing timeout is a separate unresolved runtime check;
-these compiled host/client artifacts do not claim that it passed. The existing SDK
-workflow/check is not disabled or made a prerequisite that would hide development
-binary artifacts. No Android manager/admin, Windows, macOS, 32-bit Linux or other
+The separate Android SDK workflow passed on a subsequent work push after an earlier
+emulator pairing timeout. These host/client package checks do not execute Android
+binaries or replace SDK runtime validation. The existing SDK workflow is unchanged
+and is not a prerequisite for development binary artifacts. No Android
+manager/admin, Windows, macOS, 32-bit Linux or other
 architecture support is introduced by this workflow. Windows/macOS native build
 and runtime validation remain deferred.
 
@@ -147,7 +148,8 @@ for credentials, overrides, readiness, restart policy and supervision.
 For an update, stop/reap the old processes before replacing binaries. Retain and
 reuse the selected external config and data directories. Do not delete identities
 or pairings, copy live state into distribution files, or silently select another
-path when storage is inaccessible. Docker volumes/images remain a later phase.
+path when storage is inaccessible. See [Docker suite integration](../integrations/docker-suite.md)
+for image builds, publication and persisted volumes.
 
 ## Local packaging and checks
 

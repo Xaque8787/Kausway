@@ -1,0 +1,194 @@
+name: Container suite
+
+on:
+  push:
+    branches: [work, main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: container-suite-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/work' }}
+
+env:
+  RUST_TOOLCHAIN: '1.99.1'
+
+jobs:
+  identity:
+    if: github.ref == 'refs/heads/work' || github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    outputs:
+      image: ${{ steps.identity.outputs.image }}
+      version: ${{ steps.identity.outputs.version }}
+      publish: ${{ steps.identity.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: identity
+        env:
+          REF: ${{ github.ref }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          version=$(bash scripts/ci/check-version.sh)
+          if [[ "$REF" == refs/tags/* ]]; then
+            test "${REF#refs/tags/}" = "v$version"
+            git merge-base --is-ancestor HEAD origin/main
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/${REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          if [[ "$REF" == refs/heads/main || "$REF" == refs/tags/* ]]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: identity
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            target: x86_64-unknown-linux-musl
+            runner: ubuntu-24.04
+          - arch: arm64
+            target: aarch64-unknown-linux-musl
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Install native build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends musl-tools binutils
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --target "${{ matrix.target }}"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: suite-${{ matrix.target }}-${{ env.RUST_TOOLCHAIN }}-${{ hashFiles('rust/Cargo.lock') }}
+      - name: Build and stage static suite with notices
+        env:
+          CC: musl-gcc
+        run: |
+          cargo +"$RUST_TOOLCHAIN" build --manifest-path rust/Cargo.toml --release --locked \
+            --target "${{ matrix.target }}" -p kausway-manager -p kausway-host -p kausway-admin --bins
+          cargo +"$RUST_TOOLCHAIN" metadata --manifest-path rust/Cargo.toml --locked --format-version 1 \
+            --filter-platform "${{ matrix.target }}" > "$RUNNER_TEMP/metadata.json"
+          python3 scripts/packaging/stage-container.py --binary-dir "rust/target/${{ matrix.target }}/release" \
+            --metadata "$RUNNER_TEMP/metadata.json" --target "${{ matrix.target }}" \
+            --revision "$GITHUB_SHA" --output "$RUNNER_TEMP/suite-context"
+      - uses: docker/setup-buildx-action@v3
+      - name: Build native image for runtime tests
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ runner.temp }}/suite-context
+          file: deploy/standalone/runtime.Dockerfile
+          platforms: linux/${{ matrix.arch }}
+          load: true
+          provenance: false
+          tags: kausway-suite:test
+          build-args: VCS_REF=${{ github.sha }}
+          cache-from: type=gha,scope=suite-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=suite-${{ matrix.arch }}
+      - name: Verify suite, persistence, lifecycle and Alpine/Ubuntu embedding
+        run: python3 scripts/ci/container-suite-smoke.py kausway-suite:test
+      - name: Export tested development image
+        if: needs.identity.outputs.publish != 'true'
+        working-directory: ${{ runner.temp }}
+        run: |
+          docker save kausway-suite:test | gzip > "kausway-suite-${{ matrix.arch }}.docker.tar.gz"
+          sha256sum "kausway-suite-${{ matrix.arch }}.docker.tar.gz" > "kausway-suite-${{ matrix.arch }}.docker.tar.gz.sha256"
+      - uses: actions/upload-artifact@v4
+        if: needs.identity.outputs.publish != 'true'
+        with:
+          name: suite-image-${{ matrix.arch }}-${{ github.sha }}
+          path: ${{ runner.temp }}/kausway-suite-${{ matrix.arch }}.docker.tar.gz*
+          compression-level: 0
+          retention-days: 14
+      - uses: docker/login-action@v3
+        if: needs.identity.outputs.publish == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Push tested image by digest
+        id: push
+        if: needs.identity.outputs.publish == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ runner.temp }}/suite-context
+          file: deploy/standalone/runtime.Dockerfile
+          platforms: linux/${{ matrix.arch }}
+          build-args: VCS_REF=${{ github.sha }}
+          outputs: type=image,name=${{ needs.identity.outputs.image }},push-by-digest=true,name-canonical=true,push=true
+          provenance: false
+          cache-from: type=gha,scope=suite-${{ matrix.arch }}
+      - name: Record digest
+        if: needs.identity.outputs.publish == 'true'
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/digests"
+          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+      - uses: actions/upload-artifact@v4
+        if: needs.identity.outputs.publish == 'true'
+        with:
+          name: suite-digest-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          retention-days: 1
+
+  publish:
+    needs: [identity, build]
+    if: needs.identity.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: suite-digest-*
+          path: digests
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish one multi-architecture index
+        env:
+          IMAGE: ${{ needs.identity.outputs.image }}
+          VERSION: ${{ needs.identity.outputs.version }}
+          REF: ${{ github.ref }}
+        run: |
+          sources=()
+          for digest in digests/*; do sources+=("$IMAGE@sha256:$(basename "$digest")"); done
+          test "${#sources[@]}" = 2
+          tags=(-t "$IMAGE:sha-$GITHUB_SHA")
+          if [[ "$REF" == refs/heads/main ]]; then tags+=(-t "$IMAGE:latest"); fi
+          if [[ "$REF" == refs/tags/* ]]; then tags+=(-t "$IMAGE:$VERSION"); fi
+          docker buildx imagetools create "${tags[@]}" "${sources[@]}"
+          docker buildx imagetools inspect "$IMAGE:sha-$GITHUB_SHA"
+          docker buildx imagetools inspect --raw "$IMAGE:sha-$GITHUB_SHA" > index.json
+          python3 - <<'PY'
+          import json
+          index = json.load(open('index.json'))
+          platforms = {(m['platform']['os'], m['platform']['architecture']) for m in index['manifests']}
+          assert platforms == {('linux', 'amd64'), ('linux', 'arm64')}, platforms
+          assert len(index['manifests']) == 2
+          PY

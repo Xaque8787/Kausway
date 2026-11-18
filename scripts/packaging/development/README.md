@@ -99,5 +99,6 @@ For application-owned supervision and a Configure Kausway action, see
 Do not log private integration frames: they can contain setup links or passwords.
 
 Kausway is licensed under MIT OR Apache-2.0. See `licenses/`, including bundled
-third-party license texts and the dependency inventory. The official multi-platform
-Docker suite and image integration guides are a later phase.
+third-party license texts and the dependency inventory. See
+`docs/integrations/docker-suite.md` for the multi-platform Docker suite workflow
+and image integration examples; work builds are unpublished test artifacts.

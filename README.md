@@ -15,6 +15,7 @@ through the Android SDK or development CLI. Jellyfin is the reference server int
 - [Run the host](docs/getting-started/host.md): CLI, pairing, Docker and configuration.
 - [Use the Android SDK](docs/android/README.md): AAR integration, lifecycle and media routing.
 - [Embed the suite in an application](docs/integrations/application-suite.md): private browser handoff, provisioning and process ownership.
+- [Docker suite and embedding](docs/integrations/docker-suite.md): multi-architecture image, sidecar, persisted volumes, binary-copy stages and application supervision.
 - [Integrate a server](docs/integrations/host.md): host process and authenticated control API.
 
 ## Repository map
@@ -26,6 +27,7 @@ through the Android SDK or development CLI. Jellyfin is the reference server int
 | `examples/android-basic/` | Example consuming the built AAR; included as Gradle project `:sample` |
 | `integrations/jellyfin/` | Reference plugin, tests and pinned .NET SDK |
 | `deploy/jellyfin/` | Combined Jellyfin/Kausway Dockerfile, Compose and entrypoint |
+| `deploy/standalone/` | Multi-architecture manager/host/admin suite image and sidecar Compose |
 | `scripts/android/` | Native/AAR builds, artifact inspection and emulator fixtures |
 | `scripts/ci/` | Version checks and end-to-end/smoke validation |
 | `scripts/packaging/` | CLI archive and Jellyfin plugin packaging |
@@ -54,8 +56,9 @@ See [pinned versions](docs/operations/versions.md),
 [transport policies](docs/architecture/transport-policies.md) and the
 [structure validation record](docs/operations/repository-structure.md).
 
-Maven Central publication, iOS bindings and a standalone sidecar Docker image are
-planned separately. The future standalone deployment will live in `deploy/standalone/`.
+Maven Central publication and iOS bindings are planned separately. The standalone
+suite deployment lives in `deploy/standalone/`; work builds are tested artifacts,
+with GHCR publication enabled when the new workflow runs on main or a release tag.
 
 Shared suite configuration and platform storage defaults are described in
 [configuration and storage](docs/architecture/configuration-and-storage.md).

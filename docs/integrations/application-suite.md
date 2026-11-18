@@ -6,9 +6,9 @@ The manager owns its children. A developer does not need to implement a settings
 page, password hashing or browser session handling.
 
 This integration is implemented and validated on Linux. Windows manager/named-pipe
-support and native macOS validation remain deferred. Binary release packaging and
-Docker suite publishing are later phases; the same process contract works in
-native and containerized Linux applications.
+support and native macOS validation remain deferred. Development binary packaging
+is available; [Docker suite integration](docker-suite.md) covers the same process
+contract in containers, sidecar deployment and multi-architecture image publishing.
 
 ## Application responsibilities
 

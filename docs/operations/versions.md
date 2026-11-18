@@ -9,6 +9,7 @@
 | Rust MSRV | `1.91` | `rust-version` in `rust/Cargo.toml`, CI `msrv` job | Iroh 1.4.1 needs edition 2024 and Rust 1.91. The host uses `File::try_lock` (stable since 1.89). |
 | Crate graph | exact | `rust/Cargo.lock` (committed) | CI and Docker build with `--locked`. |
 | Rust build image | `rust:1.99.1-slim-bookworm@sha256:24707e70…f1d400` | Dockerfile | Same compiler as CI. Bookworm's older glibc keeps the binary compatible with the newer Debian in the Jellyfin image. |
+| Suite runtime image | `alpine:3.22@sha256:49340b34…34e898f` | `deploy/standalone/{Dockerfile,runtime.Dockerfile}` | Multi-architecture index; includes the maintained system CA bundle. Suite executables are static musl builds. |
 | Jellyfin server image | `jellyfin/jellyfin:12.4.20261026-211555@sha256:fea863d0…1b771` | Dockerfile | Current stable 12.4 release, pinned by tag and multi-arch index digest (amd64 and arm64). |
 | Jellyfin plugin SDK | `Jellyfin.Controller` / `Jellyfin.Model` `12.4.0` | `Jellyfin.Plugin.Kausway.csproj` | Must match the server's ABI (`targetAbi` `12.4.0.0` in `meta.json`). The 12.4.0 packages target `net10.0`. |
 | .NET SDK | `10.0.403` | `integrations/jellyfin/global.json`, Dockerfile (`mcr.microsoft.com/dotnet/sdk:10.0.403@sha256:de4fe90a…dc02b`) | Latest .NET 10 SDK; Jellyfin 12.4 runs on .NET 10. `global.json` allows newer patch releases only. |
@@ -18,7 +19,8 @@ Full digests are in the Dockerfile.
 
 ## Policy
 
-- No `latest` tags.
+- Build dependency/base images do not use `latest`. The suite deliberately publishes
+  a `latest` convenience tag from main; integrations should pin a version or index digest.
 - Upgrading Iroh means re-verifying the API, then re-running the transport tests and the real-network checks in `docs/architecture/transport-policies.md`.
 - Upgrading Jellyfin means changing the image, the two SDK packages and `targetAbi` together.
 - `cargo update` is a deliberate change reviewed in its own commit.

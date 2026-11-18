@@ -1,0 +1,17 @@
+services:
+  kausway:
+    image: ghcr.io/xaque8787/kausway:latest
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 45s
+    ports:
+      - "127.0.0.1:47951:47951"
+    volumes:
+      - kausway-config:/config
+      - kausway-data:/data
+    # No command or host origin override: complete first-run setup in admin.
+    # Set origin to http://<application-service-name>:<port> on a shared network.
+
+volumes:
+  kausway-config:
+  kausway-data:
