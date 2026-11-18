@@ -1,0 +1,169 @@
+name: Work development binaries
+
+# Development artifacts only. Never publish releases or execute on main/tags.
+on:
+  push:
+    branches: [work]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: work-binaries-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_TOOLCHAIN: '1.99.1'
+  ANDROID_API: '24'
+  ANDROID_NDK_VERSION: '27.2.12479018'
+
+jobs:
+  validate:
+    if: github.ref == 'refs/heads/work'
+    runs-on: ubuntu-24.04
+    outputs:
+      build_id: ${{ steps.version.outputs.build_id }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Development identity (base version remains unchanged)
+        id: version
+        shell: bash
+        run: |
+          version=$(bash scripts/ci/check-version.sh)
+          echo "build_id=$version-dev.g${GITHUB_SHA:0:12}" >> "$GITHUB_OUTPUT"
+      - name: Install Rust
+        run: rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --component rustfmt,clippy
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: work-validation-${{ runner.os }}-${{ env.RUST_TOOLCHAIN }}-${{ hashFiles('rust/Cargo.lock') }}
+      - name: Validate Rust workspace
+        working-directory: rust
+        run: |
+          cargo +"$RUST_TOOLCHAIN" fmt --all --check
+          cargo +"$RUST_TOOLCHAIN" clippy --workspace --all-targets --locked -- -D warnings
+          cargo +"$RUST_TOOLCHAIN" test --workspace --locked
+      - name: Packaging tools compile
+        run: python3 -m py_compile scripts/packaging/package-development.py scripts/ci/development-package-smoke.py
+
+  linux:
+    if: github.ref == 'refs/heads/work'
+    needs: validate
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            runner: ubuntu-24.04
+          - target: aarch64-unknown-linux-musl
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Install native musl build tools and Rust
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends musl-tools binutils
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --target "${{ matrix.target }}"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: work-linux-${{ matrix.target }}-${{ env.RUST_TOOLCHAIN }}-${{ hashFiles('rust/Cargo.lock') }}
+      - name: Build separate suite binaries
+        working-directory: rust
+        env:
+          CC: musl-gcc
+        run: cargo +"$RUST_TOOLCHAIN" build --release --locked --target "${{ matrix.target }}" -p kausway-host -p kausway-manager -p kausway-admin --bins
+      - name: Capture target dependency metadata
+        working-directory: rust
+        run: cargo +"$RUST_TOOLCHAIN" metadata --locked --format-version 1 --filter-platform "${{ matrix.target }}" > "$RUNNER_TEMP/metadata.json"
+      - name: Package suite and individual binary archives
+        run: |
+          python3 scripts/packaging/package-development.py \
+            --binary-dir "rust/target/${{ matrix.target }}/release" \
+            --metadata "$RUNNER_TEMP/metadata.json" --target "${{ matrix.target }}" \
+            --commit "$GITHUB_SHA" --output "$RUNNER_TEMP/development-artifacts"
+      - name: Verify clean extraction, defaults, persistence and component archives
+        run: python3 scripts/ci/development-package-smoke.py "$RUNNER_TEMP/development-artifacts" --run
+      - uses: actions/upload-artifact@v4
+        with:
+          name: development-kausway-${{ needs.validate.outputs.build_id }}-${{ matrix.target }}-attempt${{ github.run_attempt }}
+          path: ${{ runner.temp }}/development-artifacts/*
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+
+  android:
+    if: github.ref == 'refs/heads/work'
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - abi: arm64-v8a
+            target: aarch64-linux-android
+          - abi: armeabi-v7a
+            target: armv7-linux-androideabi
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          cmdline-tools-version: 12266719
+          packages: platform-tools
+      - name: Install pinned NDK, cargo-ndk and Rust target
+        run: |
+          sdkmanager "ndk;$ANDROID_NDK_VERSION"
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --target "${{ matrix.target }}"
+          cargo +"$RUST_TOOLCHAIN" install cargo-ndk --version 4.1.2 --locked
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: work-android-${{ matrix.target }}-${{ env.ANDROID_NDK_VERSION }}-${{ env.RUST_TOOLCHAIN }}-${{ hashFiles('rust/Cargo.lock') }}
+      - name: Build host and CLI client only (no manager/admin)
+        working-directory: rust
+        env:
+          ABI: ${{ matrix.abi }}
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION"
+          cargo +"$RUST_TOOLCHAIN" ndk -t "$ABI" -P "$ANDROID_API" build --release --locked -p kausway-host --bins
+      - name: Capture target dependency metadata
+        working-directory: rust
+        run: cargo +"$RUST_TOOLCHAIN" metadata --locked --format-version 1 --filter-platform "${{ matrix.target }}" > "$RUNNER_TEMP/metadata.json"
+      - name: Package compiled Android host/client artifacts
+        run: |
+          python3 scripts/packaging/package-development.py \
+            --binary-dir "rust/target/${{ matrix.target }}/release" \
+            --metadata "$RUNNER_TEMP/metadata.json" --target "${{ matrix.target }}" \
+            --commit "$GITHUB_SHA" --output "$RUNNER_TEMP/development-artifacts"
+          python3 scripts/ci/development-package-smoke.py "$RUNNER_TEMP/development-artifacts"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: development-kausway-${{ needs.validate.outputs.build_id }}-${{ matrix.target }}-attempt${{ github.run_attempt }}
+          path: ${{ runner.temp }}/development-artifacts/*
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error

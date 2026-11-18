@@ -7,6 +7,8 @@ through the Android SDK or development CLI. Jellyfin is the reference server int
 
 ## Start here
 
+- [Development binary downloads](docs/operations/development-binaries.md): work-only suite/component archives, targets, checksums and first launch.
+
 - [Quick start: local testing](docs/getting-started/local-testing.md): download the CLIs, start a host, pair a client and access any HTTP origin.
 - [Complete CLI reference](docs/operations/cli-reference.md): every command, argument and environment variable.
 

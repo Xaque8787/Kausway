@@ -1,0 +1,33 @@
+# Optional template. Each binary also creates missing configuration automatically.
+# CLI arguments override environment, then saved values, then built-in defaults.
+# No identities, tokens, or usable administrator credentials are distributed.
+schema_version = 1
+
+[host]
+origin = "http://127.0.0.1:8096"
+policy = "auto"
+relay_url = ""
+websockets = true
+websocket_origin = "rewrite"
+
+[host.control]
+listen = "127.0.0.1:47950"
+allow_remote = false
+
+[manager]
+host_enabled = false
+shutdown_timeout_secs = 15
+restart_on_failure = true
+restart_backoff_initial_secs = 1
+restart_backoff_max_secs = 30
+max_failures = 5
+readiness_timeout_secs = 30
+restart_policy = "host"
+application_name = "application"
+
+[admin]
+enabled = false
+listen = "127.0.0.1:47951"
+# browser_base_url = "http://127.0.0.1:47951"
+
+# No [admin.auth] account exists until web setup or local provisioning succeeds.
