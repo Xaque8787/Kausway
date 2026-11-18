@@ -44,9 +44,15 @@ enum Observed {
 #[serde(deny_unknown_fields)]
 struct Request {
     operation: String,
+    #[serde(default)]
+    id: Option<u64>,
+    #[serde(default)]
+    username: String,
+    #[serde(default)]
+    password: String,
 }
 struct Call {
-    operation: String,
+    request: Request,
     reply: oneshot::Sender<Value>,
     written: oneshot::Receiver<()>,
 }
@@ -312,6 +318,33 @@ impl Supervisor {
             _ => Err("unknown operation".into()),
         }
     }
+    async fn dispatch(&mut self, request: Request) -> Result<Value, String> {
+        let admin_operation = match request.operation.as_str() {
+            "admin.open" => Some("entry-link"),
+            "admin.status" => Some("status"),
+            "admin.credentials.initialize" => Some("credentials.set"),
+            "admin.credentials.reset" => Some("credentials.reset"),
+            _ => None,
+        };
+        if let Some(operation) = admin_operation {
+            if self.admin.is_none() {
+                return Err(
+                    "Admin is not running; enable --admin-ui and wait for readiness".into(),
+                );
+            }
+            let result = admin_request(
+                &self.root.join("admin"),
+                &self.config,
+                operation,
+                &request.username,
+                &request.password,
+            )
+            .await?;
+            return Ok(json!({"ok":true,"result":result,"status":self.status()}));
+        }
+        self.operation(&request.operation).await?;
+        Ok(json!({"ok":true,"status":self.status()}))
+    }
     async fn shutdown(&mut self) -> Result<(), String> {
         let host_result = self.stop_host().await;
         let admin_result = if let Some(mut admin) = self.admin.take() {
@@ -382,7 +415,7 @@ fn policy(args: &RunArgs, mut saved: Manager) -> Result<Manager, String> {
 }
 
 fn spawn(command: &mut Command) -> std::io::Result<Child> {
-    spawn_child(command, false)
+    spawn_child(command, false, false)
 }
 
 #[derive(Deserialize)]
@@ -424,7 +457,11 @@ fn forward_admin_event(bytes: &[u8]) {
         );
     }
 }
-fn spawn_child(command: &mut Command, admin_events: bool) -> std::io::Result<Child> {
+fn spawn_child(
+    command: &mut Command,
+    admin_events: bool,
+    forward_setup: bool,
+) -> std::io::Result<Child> {
     let mut child = command
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -442,7 +479,7 @@ fn spawn_child(command: &mut Command, admin_events: bool) -> std::io::Result<Chi
                 if n == 0 {
                     break;
                 }
-                if !admin_events {
+                if !admin_events || !forward_setup {
                     continue;
                 }
                 for byte in &bytes[..n] {
@@ -569,7 +606,7 @@ async fn peer(
         let (reply, receive) = oneshot::channel();
         calls
             .send(Call {
-                operation: request.operation,
+                request,
                 reply,
                 written: when_written,
             })
@@ -721,8 +758,10 @@ pub async fn run(args: RunArgs) -> Result<(), String> {
             .arg("--host-data-dir")
             .arg(supervisor.root.join("host"))
             .env("KAUSWAY_ADMIN_STARTUP_EVENTS", "1");
-        supervisor.admin =
-            Some(spawn_child(&mut command, true).map_err(|e| format!("cannot launch admin: {e}"))?);
+        supervisor.admin = Some(
+            spawn_child(&mut command, true, !supervisor.args.integration_stdio)
+                .map_err(|e| format!("cannot launch admin: {e}"))?,
+        );
         supervisor.admin_observed = Observed::Running;
         supervisor.event("admin child launched (process status only)");
     }
@@ -750,16 +789,25 @@ pub async fn run(args: RunArgs) -> Result<(), String> {
             }
         }
     });
+    let mut integration_task = if supervisor.args.integration_stdio {
+        Some(tokio::spawn(integration_stdio(
+            send.clone(),
+            supervisor.published.clone(),
+        )))
+    } else {
+        None
+    };
     let mut tick = tokio::time::interval(Duration::from_millis(100));
     let result = loop {
         tokio::select! {
             _ = term.recv() => break Ok(()),
             _ = interrupt.recv() => break Ok(()),
             Some(call) = receive.recv() => {
-                let result = supervisor.operation(&call.operation).await;
-                let shutdown = call.operation == "shutdown" && result.is_ok();
+                let shutdown = call.request.operation == "shutdown";
+                let result = supervisor.dispatch(call.request).await;
+                let shutdown = shutdown && result.is_ok();
                 let response = match result {
-                    Ok(()) => json!({"ok": true, "status": supervisor.status()}),
+                    Ok(value) => value,
                     Err(error) => json!({"ok": false, "error": error, "status": supervisor.status()}),
                 };
                 let _ = call.reply.send(response);
@@ -768,14 +816,256 @@ pub async fn run(args: RunArgs) -> Result<(), String> {
                     break Ok(());
                 }
             }
+            result = async { integration_task.as_mut().unwrap().await }, if integration_task.is_some() => break result.map_err(|e| e.to_string()).and_then(|v| v),
             result = &mut accept_task => break result.map_err(|e| e.to_string()).and_then(|v| v),
             _ = tick.tick() => if let Err(e) = supervisor.tick().await { break Err(e); },
         }
     };
     let shutdown_result = supervisor.shutdown().await;
+    if let Some(task) = integration_task {
+        task.abort();
+    }
     let _ = stop_listener.send(true);
     if !accept_task.is_finished() {
         let _ = accept_task.await;
     }
     result.and(shutdown_result)
+}
+
+async fn admin_request(
+    data: &Path,
+    config: &Path,
+    operation: &str,
+    username: &str,
+    password: &str,
+) -> Result<Value, String> {
+    timeout(Duration::from_secs(10), async {
+        let mut stream = UnixStream::connect(data.join("control.sock"))
+            .await
+            .map_err(|_| "Admin local interface unavailable; wait for readiness")?;
+        let mut bytes = serde_json::to_vec(
+            &json!({"operation":operation,"config":config,"username":username,"password":password}),
+        )
+        .map_err(|_| "Could not encode admin operation")?;
+        bytes.push(b'\n');
+        if bytes.len() as u64 > MAX_MESSAGE {
+            return Err("Admin operation exceeds frame limit".into());
+        }
+        stream
+            .write_all(&bytes)
+            .await
+            .map_err(|_| "Could not send admin operation")?;
+        let response: Value = serde_json::from_slice(&read_message(&mut stream).await?)
+            .map_err(|_| "Invalid admin response")?;
+        if response["ok"] != true {
+            return Err(response["error"]
+                .as_str()
+                .unwrap_or("Admin operation failed")
+                .into());
+        }
+        Ok(response["result"].clone())
+    })
+    .await
+    .map_err(|_| "Admin operation timed out")?
+}
+
+async fn integration_stdio(
+    calls: mpsc::Sender<Call>,
+    published: Arc<std::sync::Mutex<Value>>,
+) -> Result<(), String> {
+    let mut input = BufReader::new(PrivatePipe::new(libc::STDIN_FILENO)?);
+    let mut output = PrivatePipe::new(libc::STDOUT_FILENO)?;
+    let status = published
+        .lock()
+        .map_err(|_| "Manager status unavailable")?
+        .clone();
+    write_frame(
+        &mut output,
+        json!({"event":"ready","protocol":1,"status":status}),
+    )
+    .await?;
+    loop {
+        let mut bytes = Vec::new();
+        let count = (&mut input)
+            .take(MAX_MESSAGE + 1)
+            .read_until(b'\n', &mut bytes)
+            .await
+            .map_err(|_| "Integration input failed")?;
+        if count == 0 {
+            return Ok(());
+        }
+        if count as u64 > MAX_MESSAGE || bytes.last() != Some(&b'\n') {
+            return Err("Invalid or oversized integration frame".into());
+        }
+        let request: Request = match serde_json::from_slice(&bytes) {
+            Ok(request) => request,
+            Err(_) => {
+                write_frame(
+                    &mut output,
+                    json!({"ok":false,"id":null,"error":"Invalid integration request"}),
+                )
+                .await?;
+                continue;
+            }
+        };
+        let Some(id) = request.id else {
+            write_frame(
+                &mut output,
+                json!({"ok":false,"id":null,"error":"An integer request id is required"}),
+            )
+            .await?;
+            continue;
+        };
+        let shutdown = request.operation == "shutdown";
+        let (written, when_written) = oneshot::channel();
+        let mut response = if request.operation == "status" {
+            let status = published
+                .lock()
+                .map_err(|_| "Manager status unavailable")?
+                .clone();
+            json!({"ok":true,"status":status})
+        } else {
+            let (reply, receive) = oneshot::channel();
+            calls
+                .send(Call {
+                    request,
+                    reply,
+                    written: when_written,
+                })
+                .await
+                .map_err(|_| "Manager stopping")?;
+            receive.await.map_err(|_| "Manager stopping")?
+        };
+        response["id"] = json!(id);
+        let successful = response["ok"] == true;
+        write_frame(&mut output, response).await?;
+        let _ = written.send(());
+        if shutdown && successful {
+            return Ok(());
+        }
+    }
+}
+async fn write_frame(
+    output: &mut (impl tokio::io::AsyncWrite + Unpin),
+    value: Value,
+) -> Result<(), String> {
+    let mut bytes = serde_json::to_vec(&value).map_err(|_| "Could not encode integration reply")?;
+    bytes.push(b'\n');
+    timeout(Duration::from_secs(5), async {
+        output
+            .write_all(&bytes)
+            .await
+            .map_err(|_| "Integration output closed")?;
+        output
+            .flush()
+            .await
+            .map_err(|_| "Integration output closed".to_string())
+    })
+    .await
+    .map_err(|_| "Integration output blocked")?
+}
+
+/// Nonblocking inherited pipes. Tokio's blocking stdin/stdout adapters cannot be
+/// cancelled on parent disconnect/backpressure and can prevent runtime shutdown.
+struct PrivatePipe(tokio::io::unix::AsyncFd<File>);
+impl PrivatePipe {
+    fn new(fd: libc::c_int) -> Result<Self, String> {
+        use std::os::fd::{AsRawFd, FromRawFd};
+        let duplicated = unsafe { libc::fcntl(fd, libc::F_DUPFD_CLOEXEC, 3) };
+        if duplicated < 0 {
+            return Err("Could not duplicate private integration descriptor".into());
+        }
+        let file = unsafe { File::from_raw_fd(duplicated) };
+        let flags = unsafe { libc::fcntl(file.as_raw_fd(), libc::F_GETFL) };
+        if flags < 0
+            || unsafe { libc::fcntl(file.as_raw_fd(), libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0
+        {
+            return Err("Could not configure private nonblocking integration pipe".into());
+        }
+        // SAFETY: File owns this duplicated descriptor exclusively and keeps it
+        // open and unchanged for the complete AsyncFd lifetime.
+        unsafe { tokio::io::unix::AsyncFd::register(file) }
+            .map(Self)
+            .map_err(|_| "Integration stdio requires inherited pipes or sockets".into())
+    }
+}
+impl tokio::io::AsyncRead for PrivatePipe {
+    fn poll_read(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buffer: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        use std::{
+            os::fd::AsRawFd,
+            task::{Poll, ready},
+        };
+        if buffer.remaining() == 0 {
+            return Poll::Ready(Ok(()));
+        }
+        loop {
+            let mut guard = ready!(self.0.poll_read_ready(cx))?;
+            match guard.try_io(|inner| {
+                let free = buffer.initialize_unfilled();
+                let read = unsafe {
+                    libc::read(
+                        inner.get_ref().as_raw_fd(),
+                        free.as_mut_ptr().cast(),
+                        free.len(),
+                    )
+                };
+                if read < 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                buffer.advance(read as usize);
+                Ok(())
+            }) {
+                Ok(result) => return Poll::Ready(result),
+                Err(_) => continue,
+            }
+        }
+    }
+}
+impl tokio::io::AsyncWrite for PrivatePipe {
+    fn poll_write(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        bytes: &[u8],
+    ) -> std::task::Poll<std::io::Result<usize>> {
+        use std::{
+            os::fd::AsRawFd,
+            task::{Poll, ready},
+        };
+        loop {
+            let mut guard = ready!(self.0.poll_write_ready(cx))?;
+            match guard.try_io(|inner| {
+                let written = unsafe {
+                    libc::write(
+                        inner.get_ref().as_raw_fd(),
+                        bytes.as_ptr().cast(),
+                        bytes.len(),
+                    )
+                };
+                if written < 0 {
+                    Err(std::io::Error::last_os_error())
+                } else {
+                    Ok(written as usize)
+                }
+            }) {
+                Ok(result) => return Poll::Ready(result),
+                Err(_) => continue,
+            }
+        }
+    }
+    fn poll_flush(
+        self: std::pin::Pin<&mut Self>,
+        _: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::task::Poll::Ready(Ok(()))
+    }
+    fn poll_shutdown(
+        self: std::pin::Pin<&mut Self>,
+        _: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::task::Poll::Ready(Ok(()))
+    }
 }

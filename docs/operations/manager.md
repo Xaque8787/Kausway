@@ -207,3 +207,11 @@ work so it remains responsive during graceful stop.
 The manager preserves the control listener's CLI/environment/file/default source
 in the child. An internal managed-host guard enforces loopback-only binding rather
 than turning saved listener settings into artificial CLI overrides.
+
+## Application integration (Phase 5)
+
+`--integration-stdio` provides a private framed stdin/stdout protocol, readiness
+handshake, admin setup/login links, credential provisioning and parent-disconnect
+shutdown. In this mode startup setup links are not forwarded to logs.
+See [application integration](../integrations/application-suite.md) for the protocol,
+reference helper and independent host/admin alternative.

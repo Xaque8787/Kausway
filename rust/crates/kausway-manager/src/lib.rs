@@ -4,6 +4,9 @@ use std::path::PathBuf;
 
 #[derive(Clone, Args)]
 pub struct RunArgs {
+    /// Private newline-delimited JSON control over inherited stdin/stdout; EOF shuts down owned children.
+    #[arg(long)]
+    pub integration_stdio: bool,
     #[arg(skip)]
     pub sources: std::collections::BTreeMap<String, kausway_config::Source>,
     #[arg(long, env = "KAUSWAY_RESTART_POLICY", value_parser = ["host", "application"])]

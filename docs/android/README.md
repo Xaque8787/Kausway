@@ -260,3 +260,17 @@ The sample deliberately has no playback engine dependency; the Media3 integratio
 snippet above is illustrative. Media3 playback, physical Android TV devices,
 real mobile network changes and public relay operation require additional device
 validation. See [validation.md](../history/android-validation.md) for the checks actually performed.
+
+## CI branch scope
+
+The Android SDK workflow intentionally validates all branches when changes touch
+`rust/**`, Android SDK/sample code, Android scripts or its workflow file. A push to
+`work` therefore runs it too. It includes workspace Rust checks, native/AAR builds,
+an independent consumer build and emulator runtime tests. An emulator pairing
+failure can occur after all compilation checks pass; inspect the instrumented test
+stage and host-route diagnostics rather than interpreting the workflow name as a
+compiler failure.
+
+These branch runs validate and upload Actions artifacts. They do not merge branches
+or publish a GitHub Release. SDK release artifacts are gated on emulator success;
+the separate release workflow also enforces its release/default-branch rules.

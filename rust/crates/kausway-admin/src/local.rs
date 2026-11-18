@@ -86,6 +86,15 @@ pub async fn serve(
                         let input: Request = serde_json::from_slice(&bytes).map_err(|_| "Invalid local request")?;
                         if input.config != config { return Err("Selected configuration does not match the running admin".into()); }
                         let value = match input.operation.as_str() {
+                            "status" => {
+                                let status = shared.work(|s| s.status(None)).await.map_err(|(_,e)| e.to_string())?;
+                                json!({"ready":true,"configured":status.configured,"base_url":shared.base})
+                            },
+                            "entry-link" => {
+                                let configured = shared.work(|s| s.status(None)).await.map_err(|(_,e)| e.to_string())?.configured;
+                                if configured { json!({"state":"configured","url":format!("{}/login",shared.base)}) }
+                                else { json!({"state":"setup_required","url":shared.setup_link().await.map_err(|(_,e)| e.to_string())?,"expires_in_secs":auth::SETUP_LIFETIME.as_secs()}) }
+                            },
                             "setup-link" => json!({"url": shared.setup_link().await.map_err(|(_, e)| e.to_string())?, "expires_in_secs": auth::SETUP_LIFETIME.as_secs()}),
                             "credentials.set" | "credentials.reset" => {
                                 shared.work(move |s| s.provision(&input.username, &input.password, input.operation == "credentials.reset")).await.map_err(|(_, e)| e.to_string())?;

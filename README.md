@@ -12,6 +12,7 @@ through the Android SDK or development CLI. Jellyfin is the reference server int
 
 - [Run the host](docs/getting-started/host.md): CLI, pairing, Docker and configuration.
 - [Use the Android SDK](docs/android/README.md): AAR integration, lifecycle and media routing.
+- [Embed the suite in an application](docs/integrations/application-suite.md): private browser handoff, provisioning and process ownership.
 - [Integrate a server](docs/integrations/host.md): host process and authenticated control API.
 
 ## Repository map

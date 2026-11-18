@@ -177,8 +177,9 @@ Each connection carries one bounded newline-delimited JSON request, including th
 canonical selected config path. Supported operations are `setup-link`,
 `credentials.set`, and `credentials.reset`; the latter two include username and
 password. Replies contain `ok` and `result`, or a generic error. Secrets are not
-logged. Configuration mismatch is rejected. This forms the local foundation for
-the application integration work in Phase 5; no application SDK is promised yet.
+logged. Configuration mismatch is rejected. Phase 5 adds `status` and `entry-link` for application handoff and manager forwarding.
+See [application integration](../integrations/application-suite.md) for the implemented
+private protocol and reference helper; no separately published SDK is required.
 
 ## Validation scope
 
