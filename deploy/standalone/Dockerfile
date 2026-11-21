@@ -22,6 +22,8 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     && for binary in kausway kausway-host kausway-admin kausway-test-client; do cp "rust/target/$target/release/$binary" /binaries/; done \
     && cargo metadata --manifest-path rust/Cargo.toml --locked --format-version 1 --filter-platform "$target" > /metadata.json
 COPY scripts/packaging/ scripts/packaging/
+COPY scripts/releases/ scripts/releases/
+COPY releases.toml ./
 COPY LICENSE-MIT LICENSE-APACHE ./
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     case "$TARGETARCH" in amd64) target=x86_64-unknown-linux-musl ;; arm64) target=aarch64-unknown-linux-musl ;; *) exit 1 ;; esac \

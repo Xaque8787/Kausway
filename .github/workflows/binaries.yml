@@ -28,6 +28,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.check.outputs.version }}
+      client_version: ${{ steps.check.outputs.client_version }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -39,6 +40,7 @@ jobs:
         run: |
           version=$(bash scripts/ci/check-version.sh "$TAG")
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "client_version=$(bash scripts/ci/check-version.sh --track client)" >> "$GITHUB_OUTPUT"
 
       - name: Release tags must belong to the default branch
         if: github.ref_type == 'tag'
@@ -104,12 +106,15 @@ jobs:
       - name: Binaries are static and report the release version
         env:
           VERSION: ${{ needs.version.outputs.version }}
+          CLIENT_VERSION: ${{ needs.version.outputs.client_version }}
         run: |
           set -eux
           dir=target/${{ matrix.target }}/release
           for b in kausway-host kausway-test-client; do
             file "$dir/$b" | grep -Eq 'statically linked|static-pie linked'
-            "$dir/$b" --version | grep -F "$VERSION"
+            expected="$VERSION"
+            if [ "$b" = kausway-test-client ]; then expected="$CLIENT_VERSION"; fi
+            test "$("$dir/$b" --version)" = "$b $expected"
           done
 
       - name: End-to-end test with the release binaries
@@ -241,7 +246,7 @@ jobs:
 
       - name: SDK release assets are present
         env:
-          VERSION: ${{ needs.version.outputs.version }}
+          VERSION: ${{ needs.version.outputs.client_version }}
         run: |
           test -s "dist/kausway-client-android-$VERSION.aar"
           test -s "dist/kausway-client-android-$VERSION.pom"

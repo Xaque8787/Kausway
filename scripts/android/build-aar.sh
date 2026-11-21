@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 root=$(cd "$(dirname "$0")/../.." && pwd)
-version=$(bash "$root/scripts/ci/check-version.sh")
+version=$(bash "$root/scripts/ci/check-version.sh" --track client)
 name="kausway-client-android-$version"
 python3 "$root/scripts/android/prepare-verifier.py"
 bash "$root/scripts/android/build-native.sh"

@@ -5,7 +5,10 @@ import json
 from pathlib import Path
 import runpy
 import shutil
-import tomllib
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'releases'))
+from versions import binary_versions, check_metadata, load_release
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -24,9 +27,10 @@ def main():
     for binary in package['BINARIES']['linux']:
         package['check_binary'](args.binary_dir / binary, args.target)
     metadata = json.loads(args.metadata.read_text())
+    check_metadata(metadata, ROOT)
     if Path(metadata['workspace_root']).resolve() != ROOT / 'rust':
         parser.error('metadata belongs to another workspace')
-    version = tomllib.loads((ROOT / 'rust/Cargo.toml').read_text())['workspace']['package']['version']
+    releases = load_release(ROOT)
     bindir = args.output / 'bin'
     bindir.mkdir(parents=True)
     for binary in package['BINARIES']['linux']:
@@ -39,7 +43,10 @@ def main():
         shutil.copyfile(ROOT / name, licenses / name)
     package['notices'](metadata, 'linux', licenses)
     (share / 'BUILD-INFO.json').write_text(json.dumps({
-        'version': version, 'revision': args.revision, 'target': args.target,
+        'version': releases['container']['version'],
+        'suite_version': releases['suite']['version'],
+        'selected_suite_version': releases['container']['suite_version'],
+        'binary_versions': binary_versions(ROOT), 'revision': args.revision, 'target': args.target,
         'binaries': {name: package['sha256'](bindir / name) for name in package['BINARIES']['linux']},
     }, indent=2) + '\n')
     for path in share.rglob('*'):

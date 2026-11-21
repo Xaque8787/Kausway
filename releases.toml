@@ -1,0 +1,13 @@
+# Release versions are chosen here, synchronized locally, and committed together.
+# No declaration here publishes anything. Publication is being redesigned in 8.4.
+schema_version = 1
+
+[suite]
+version = "0.4.0"
+
+[client]
+version = "0.4.0"
+
+[container]
+version = "0.1.0"
+suite_version = "0.4.0"

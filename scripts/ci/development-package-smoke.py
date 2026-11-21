@@ -61,6 +61,9 @@ def verify_archive(path, expected, destination):
         'kausway' if manifest['component'] == 'manager' else 'kausway-' + manifest['component']]
     if manifest['binaries'] != expected_bins:
         raise ValueError('Incorrect component binary inventory')
+    expected_versions = {name: manifest['versions']['client' if name == 'kausway-test-client' else 'suite'] for name in expected_bins}
+    if manifest['binary_versions'] != expected_versions:
+        raise ValueError('Incorrect binary release-track versions')
     if manifest['platform'] == 'android' and manifest['minimum_android_api'] != 24:
         raise ValueError('Missing Android runtime requirement')
     actual = {p.relative_to(root).as_posix(): digest(p) for p in root.rglob('*') if p.is_file() and p != root / 'BUILD-INFO.json'}
@@ -96,7 +99,7 @@ def wait_for(check):
     raise AssertionError('Extracted suite did not reach the expected state')
 
 
-def run_suite(root, version, work):
+def run_suite(root, versions, work):
     work.mkdir()
     env = {key: value for key, value in os.environ.items() if not key.startswith('KAUSWAY_')}
     env.update({'HOME': str(work / 'home'), 'XDG_CONFIG_HOME': str(work / 'config'),
@@ -106,7 +109,7 @@ def run_suite(root, version, work):
     data = work / 'data/kausway'
     for name in BINS['linux']:
         result = subprocess.run([str(root / name), '--version'], env=env, capture_output=True, text=True, check=True)
-        assert version in result.stdout
+        assert result.stdout.strip() == f'{name} {versions[name]}'
     processes = []
 
     def manager_status():
@@ -215,7 +218,7 @@ def main():
         for path in archives:
             assert path.with_name(path.name + '.sha256').read_text() == f'{sums[path.name]}  {path.name}\n'
             root, manifest = verify_archive(path, sums[path.name], temp)
-            identities.add((manifest['commit'], manifest['target'], manifest['build_id']))
+            identities.add((manifest['commit'], manifest['target'], json.dumps(manifest['versions'], sort_keys=True)))
             components.add(manifest['component'])
             for binary in manifest['binaries']:
                 current = manifest['files'][binary]
@@ -242,7 +245,7 @@ def main():
         except ValueError as error:
             assert 'Checksum mismatch' in str(error)
         if args.run:
-            run_suite(suite, manifest['base_version'], temp / 'runtime')
+            run_suite(suite, manifest['binary_versions'], temp / 'runtime')
             env = {key: value for key, value in os.environ.items() if not key.startswith('KAUSWAY_')}
             env['KAUSWAY_CONFIG'] = str(temp / 'e2e-config/config.toml')
             result = subprocess.run(['bash', str(ROOT / 'scripts/ci/e2e.sh'), str(suite)], env=env,

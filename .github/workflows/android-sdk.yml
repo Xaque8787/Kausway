@@ -21,7 +21,7 @@ jobs:
       - name: Release version
         id: version
         run: |
-          version=$(bash scripts/ci/check-version.sh)
+          version=$(bash scripts/ci/check-version.sh --track client)
           echo "version=$version" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-java@v5
         with:

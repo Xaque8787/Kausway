@@ -1,0 +1,31 @@
+schema_version = 1
+
+# Shared private config/transport crates follow the suite; these versions are not
+# wire-protocol versions and do not force client releases to match the suite.
+[rust_packages]
+kausway-manager = "suite"
+kausway-host = "suite"
+kausway-admin = "suite"
+kausway-config = "suite"
+kausway-transport = "suite"
+kausway-client = "client"
+kausway-client-android = "client"
+
+[binaries]
+kausway = "suite"
+kausway-host = "suite"
+kausway-admin = "suite"
+kausway-test-client = "client"
+
+[jellyfin]
+project = "integrations/jellyfin/plugin/Jellyfin.Plugin.Kausway.csproj"
+metadata = "integrations/jellyfin/meta.json"
+
+# SDKs share the client version. Register new SDK metadata here and add their
+# build/test/asset integration separately; registration alone adds no platform support.
+[[sdk_versions]]
+name = "android"
+track = "client"
+format = "properties"
+path = "sdks/android/release-version.properties"
+key = "version"

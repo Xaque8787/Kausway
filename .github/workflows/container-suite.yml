@@ -34,9 +34,9 @@ jobs:
           REF: ${{ github.ref }}
           REPOSITORY: ${{ github.repository }}
         run: |
-          version=$(bash scripts/ci/check-version.sh)
+          version=$(bash scripts/ci/check-version.sh --track container)
           if [[ "$REF" == refs/tags/* ]]; then
-            test "${REF#refs/tags/}" = "v$version"
+            bash scripts/ci/check-version.sh "${REF#refs/tags/}"
             git merge-base --is-ancestor HEAD origin/main
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"

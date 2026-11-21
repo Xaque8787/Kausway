@@ -53,6 +53,7 @@ docker compose -f deploy/jellyfin/compose.yaml up -d --build
 Build Validation and Android SDK run automatically. Run Binaries manually with
 Publish unchecked to generate downloadable artifacts without publishing a release.
 See [pinned versions](docs/operations/versions.md),
+[release version synchronization](docs/development/versioning.md),
 [transport policies](docs/architecture/transport-policies.md) and the
 [structure validation record](docs/operations/repository-structure.md).
 

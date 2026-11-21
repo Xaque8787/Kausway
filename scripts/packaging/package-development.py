@@ -16,7 +16,10 @@ import struct
 import subprocess
 import tarfile
 import tempfile
-import tomllib
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'releases'))
+from versions import binary_versions, check_metadata, load_release
 
 ROOT = Path(__file__).resolve().parents[2]
 TARGETS = {
@@ -162,8 +165,9 @@ def main():
     args = parser.parse_args()
     if not re.fullmatch('[0-9a-f]{40}', args.commit) or args.commit != git('rev-parse', 'HEAD'):
         parser.error('--commit must be the exact full HEAD commit')
-    base = tomllib.loads((ROOT / 'rust/Cargo.toml').read_text())['workspace']['package']['version']
-    build_id = f'{base}-dev.g{args.commit[:12]}'
+    releases = load_release(ROOT)
+    expected_versions = binary_versions(ROOT)
+    base = releases['suite']['version']
     epoch = int(git('show', '-s', '--format=%ct', args.commit))
     metadata = json.loads(args.metadata.read_text())
     if Path(metadata['workspace_root']).resolve() != ROOT / 'rust':
@@ -172,9 +176,7 @@ def main():
     binaries = BINARIES[platform]
     for binary in binaries:
         check_binary(args.binary_dir / binary, args.target)
-    for p in metadata['packages']:
-        if p['name'] in ROOT_PACKAGES[platform] and p['version'] != base:
-            parser.error('binary package versions disagree with the workspace')
+    check_metadata(metadata, ROOT)
     args.output.mkdir(parents=True, exist_ok=True)
     existing = list(args.output.iterdir())
     if existing:
@@ -203,13 +205,17 @@ def main():
         sums = []
         dirty = bool(git('status', '--porcelain', '--untracked-files=normal'))
         for component, included in groups:
+            component_version = expected_versions[included[0]] if len(included) == 1 else base
+            build_id = f'{component_version}-dev.g{args.commit[:12]}'
             name = f'kausway-{component}-{build_id}-{args.target}'
             tree = temp / name
             shutil.copytree(common, tree)
             for binary in included:
                 shutil.copyfile(args.binary_dir / binary, tree / binary)
             files = {p.relative_to(tree).as_posix(): sha256(p) for p in sorted(tree.rglob('*')) if p.is_file()}
-            manifest = {'format_version': 1, 'development': True, 'base_version': base, 'build_id': build_id,
+            manifest = {'format_version': 1, 'development': True, 'base_version': component_version, 'build_id': build_id,
+                        'versions': {track: values['version'] for track, values in releases.items() if track != 'schema_version'},
+                        'binary_versions': {name: expected_versions[name] for name in included},
                         'commit': args.commit, 'source_dirty': dirty, 'target': args.target, 'component': component,
                         'platform': platform, 'architecture': architecture, 'runtime': runtime,
                         'minimum_android_api': 24 if platform == 'android' else None,
@@ -221,7 +227,7 @@ def main():
             path.with_name(path.name + '.sha256').write_text(checksum)
             sums.append(checksum)
         (args.output / 'SHA256SUMS').write_text(''.join(sums))
-    print(f'Packaged {len(sums)} development archives for {args.target}: {build_id}')
+    print(f'Packaged {len(sums)} development archives for {args.target}: suite {base}, client {releases["client"]["version"]}')
 
 
 if __name__ == '__main__':

@@ -13,7 +13,7 @@ use tokio::io::AsyncWriteExt;
 #[derive(Debug, Parser)]
 #[command(
     name = "kausway-test-client",
-    version,
+    version = kausway_client::VERSION,
     about = "Test client for kausway hosts"
 )]
 struct Cli {

@@ -16,13 +16,17 @@ RUN --mount=type=secret,id=proxy_ca,target=/etc/ssl/certs/ca-certificates.crt \
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0.403@sha256:de4fe90a98845d75910b9769662465c84de1a934665c431279d1382b2bddc02b AS plugin-build
 ENV DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1
+RUN apt-get update && apt-get install -y --no-install-recommends python3 \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /src/integrations/jellyfin
 COPY integrations/jellyfin/ ./
 COPY scripts/packaging/package-plugin.sh /usr/local/bin/package-plugin
 # Fail the image build if host, plugin metadata and assembly versions have drifted apart.
-COPY rust/Cargo.toml rust/Cargo.lock /src/rust/
+COPY rust/ /src/rust/
+COPY releases.toml /src/releases.toml
+COPY scripts/releases/ /src/scripts/releases/
 COPY scripts/ci/check-version.sh /src/scripts/ci/check-version.sh
-RUN bash /src/scripts/ci/check-version.sh
+RUN python3 /src/scripts/releases/sync-versions.py --check --scope suite --print-version suite
 RUN --mount=type=secret,id=proxy_ca,target=/etc/ssl/certs/ca-certificates.crt \
     --mount=type=cache,target=/root/.nuget/packages \
     dotnet publish plugin/Jellyfin.Plugin.Kausway.csproj -c Release -o /build \

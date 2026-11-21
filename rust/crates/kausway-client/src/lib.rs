@@ -1,4 +1,7 @@
 //! Platform-independent client engine. No terminal signals or process-global configuration.
+/// Client release identity, also used by CLI/SDK wrappers independently of the host package.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 use iroh::{Endpoint, EndpointAddr};
 use kausway_transport::{
     client::{ClientError, ClientSession},

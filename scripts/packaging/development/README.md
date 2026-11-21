@@ -2,8 +2,8 @@
 
 These are development artifacts from the `work` branch, not a published release.
 `BUILD-INFO.json` records the exact commit, platform, base version, included
-executables and payload checksums. The binaries still report base version 0.4.0;
-use the manifest/commit to identify the development build. No Node or Rust runtime
+executables and payload checksums. Binaries report their suite or client release
+version; per-binary versions and the commit identify the development build. No Node or Rust runtime
 is required. Application integration's Python helper is optional example source.
 
 ## Verify and extract
