@@ -1,0 +1,90 @@
+name: Development containers
+
+on:
+  workflow_call:
+    inputs:
+      use_binary_artifacts:
+        type: boolean
+        default: true
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  images:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            target: x86_64-unknown-linux-musl
+            runner: ubuntu-24.04
+          - arch: arm64
+            target: aarch64-unknown-linux-musl
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        if: inputs.use_binary_artifacts
+        with:
+          pattern: development-kausway-*-${{ matrix.target }}-run${{ github.run_id }}-attempt*
+          path: ${{ runner.temp }}/binary-artifacts
+          merge-multiple: false
+      - name: Stage this run's verified suite archive
+        if: inputs.use_binary_artifacts
+        run: |
+          python3 scripts/packaging/stage-container-artifact.py \
+            --artifacts "$RUNNER_TEMP/binary-artifacts" --target "${{ matrix.target }}" \
+            --commit "$GITHUB_SHA" --output "$RUNNER_TEMP/suite-context"
+      - uses: docker/setup-buildx-action@v3
+      - name: Build image from verified artifact
+        if: inputs.use_binary_artifacts
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ runner.temp }}/suite-context
+          file: deploy/standalone/runtime.Dockerfile
+          platforms: linux/${{ matrix.arch }}
+          load: true
+          provenance: false
+          tags: kausway-suite:test
+          build-args: VCS_REF=${{ github.sha }}
+          cache-from: type=gha,scope=development-suite-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=development-suite-${{ matrix.arch }}
+      - name: Build image from source (standalone manual run)
+        if: ${{ !inputs.use_binary_artifacts }}
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/standalone/Dockerfile
+          platforms: linux/${{ matrix.arch }}
+          load: true
+          provenance: false
+          tags: kausway-suite:test
+          build-args: VCS_REF=${{ github.sha }}
+          cache-from: type=gha,scope=development-source-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=development-source-${{ matrix.arch }}
+      - name: Test suite and Alpine/Ubuntu consumers
+        run: python3 scripts/ci/container-suite-smoke.py kausway-suite:test
+      - name: Export tested image and provenance
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/image-artifact"
+          cd "$RUNNER_TEMP/image-artifact"
+          docker save kausway-suite:test | gzip > "kausway-suite-$ARCH.docker.tar.gz"
+          sha256sum "kausway-suite-$ARCH.docker.tar.gz" > "kausway-suite-$ARCH.docker.tar.gz.sha256"
+          cd "$GITHUB_WORKSPACE"
+          python3 scripts/ci/artifact-manifest.py --directory "$RUNNER_TEMP/image-artifact" \
+            --kind container --target "linux/$ARCH" --commit "$GITHUB_SHA"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: development-suite-image-${{ matrix.arch }}-${{ github.sha }}-run${{ github.run_id }}-attempt${{ github.run_attempt }}
+          path: ${{ runner.temp }}/image-artifact/*
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error

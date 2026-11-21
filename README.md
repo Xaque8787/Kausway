@@ -7,7 +7,8 @@ through the Android SDK or development CLI. Jellyfin is the reference server int
 
 ## Start here
 
-- [Development binary downloads](docs/operations/development-binaries.md): work-only suite/component archives, targets, checksums and first launch.
+- [Development binary downloads](docs/operations/development-binaries.md): branch-independent suite/component archives, targets, checksums and first launch.
+- [CI and development artifacts](docs/development/ci.md): required validation summary, SDK/plugin/image downloads and local container builds.
 
 - [Quick start: local testing](docs/getting-started/local-testing.md): download the CLIs, start a host, pair a client and access any HTTP origin.
 - [Complete CLI reference](docs/operations/cli-reference.md): every command, argument and environment variable.
@@ -33,7 +34,7 @@ through the Android SDK or development CLI. Jellyfin is the reference server int
 | `scripts/packaging/` | CLI archive and Jellyfin plugin packaging |
 | `protocol/` | Transport and control API contracts |
 | `docs/` | Current guides, architecture, operations and historical records |
-| `.github/workflows/` | Build Validation, Android SDK and manual Binaries workflows |
+| `.github/workflows/` | Parent Build Validation, reusable development builds and legacy publishers pending Phase 8.4 |
 
 ## Build and validate
 
@@ -50,16 +51,17 @@ bash scripts/android/build-aar.sh
 docker compose -f deploy/jellyfin/compose.yaml up -d --build
 ```
 
-Build Validation and Android SDK run automatically. Run Binaries manually with
-Publish unchecked to generate downloadable artifacts without publishing a release.
+Build Validation runs on every branch/PR and automatically calls binary, Android SDK
+and container development builds. Download its artifacts for testing. The legacy
+publishers remain separate until Phase 8.4; development builds do not publish.
 See [pinned versions](docs/operations/versions.md),
 [release version synchronization](docs/development/versioning.md),
 [transport policies](docs/architecture/transport-policies.md) and the
 [structure validation record](docs/operations/repository-structure.md).
 
 Maven Central publication and iOS bindings are planned separately. The standalone
-suite deployment lives in `deploy/standalone/`; work builds are tested artifacts,
-with GHCR publication enabled when the new workflow runs on main or a release tag.
+suite deployment lives in `deploy/standalone/`; branch builds provide tested image
+artifacts. Legacy main/tag publication is being replaced later in Phase 8.
 
 Shared suite configuration and platform storage defaults are described in
 [configuration and storage](docs/architecture/configuration-and-storage.md).

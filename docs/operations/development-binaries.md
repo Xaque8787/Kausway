@@ -1,26 +1,23 @@
 # Development binary distributions (Phase 6)
 
-The **Work development binaries** workflow compiles the components and produces
-checksummed development `.tar.gz` archives. It runs on pushes to `work`. Every job
-also checks `github.ref == refs/heads/work`, so a main/tag/manual-main invocation
-does not build or publish. Existing release, Build Validation and Android SDK
-workflow files are unchanged. No release permissions, tags or GitHub Releases are
-used by the development workflow. Pushes are the primary trigger: GitHub may not
-expose manual dispatch until the workflow file exists on the default branch; its
-job guards still restrict execution to `work` after a later merge.
+**Build Validation** runs on every branch push and pull request, calling
+**Development binaries** to produce checksummed `.tar.gz` archives. Its stable
+**Validation summary** also requires SDK, plugin and container checks. Component
+workflows can be manually dispatched once available on the default branch.
+See [CI and development artifacts](../development/ci.md) for the exact graph.
 
-The base version remains `0.4.0`. Archive/artifact names contain
-`0.4.0-dev.g<12-character-commit>`, while `BUILD-INFO.json` records the full commit.
-`--version` still reports the base version: use the manifest to identify a work
-build. Published 0.4.0 assets are never overwritten. A coordinated 0.5.0 bump is
-reserved for the final work-branch release-preparation commit before merging.
+Suite/client versions come from `releases.toml` and are currently both `0.4.0`.
+Archive names include the component's version plus `-dev.g<12-character-commit>`;
+BUILD-INFO records the full source and run identity. `--version` reports each
+binary's suite/client track, not the development suffix. Published assets are
+not overwritten. Release version bumps are a separate preparation step.
 
 ## Get the binaries
 
-Open a successful **Work development binaries** Actions run for the desired work
-commit and download the matching `development-kausway-...-<target>` artifact.
-GitHub transports Actions artifacts inside ZIP files; the deliverables inside
-are `.tar.gz` files, preserving executable modes.
+Open a successful **Build Validation** run for your branch/commit, then download
+`development-kausway-...-<target>-run<id>-attempt<number>` under Artifacts. Standalone
+manual Development binaries runs provide the same payloads. GitHub wraps artifacts
+in ZIPs; the actual deliverables inside are `.tar.gz`, preserving executable modes.
 
 The workflow currently builds:
 
@@ -37,13 +34,10 @@ packages must instead have an Android linker and the matching ELF architecture.
 A 64-bit CPU with a 32-bit Android userland needs the 32-bit Android build.
 Linux and Android executables are not interchangeable.
 
-The separate Android SDK workflow passed on a subsequent work push after an earlier
-emulator pairing timeout. These host/client package checks do not execute Android
-binaries or replace SDK runtime validation. The existing SDK workflow is unchanged
-and is not a prerequisite for development binary artifacts. No Android
-manager/admin, Windows, macOS, 32-bit Linux or other
-architecture support is introduced by this workflow. Windows/macOS native build
-and runtime validation remain deferred.
+The parent also requires Android SDK build/consumer/emulator validation; these
+cross-built host/client packages alone do not execute Android binaries. Artifacts
+may be available before other required checks finish, so confirm the summary.
+No Android manager/admin, Windows, macOS or 32-bit Linux workflow target is added.
 
 ## Payload layout
 
@@ -167,8 +161,8 @@ python3 scripts/ci/development-package-smoke.py /tmp/kausway-development-artifac
 
 The output directory must be empty. Unsupported/wrong-architecture binaries,
 dynamically linked musl inputs, unrelated workspace metadata or a non-HEAD commit
-are rejected rather than producing misleading artifacts. The existing release
-packaging script is not used or modified.
+are rejected rather than producing misleading artifacts. This development packager
+is separate from the legacy release packager; publication redesign is later Phase 8 work.
 
 For local GNU/Linux packaging validation only, the script also accepts
 `x86_64-unknown-linux-gnu`; this is not a published workflow target or a static musl

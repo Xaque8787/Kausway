@@ -20,6 +20,8 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'releases'))
 from versions import binary_versions, check_metadata, load_release
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'ci'))
+from provenance import ci_context
 
 ROOT = Path(__file__).resolve().parents[2]
 TARGETS = {
@@ -27,13 +29,14 @@ TARGETS = {
     'aarch64-unknown-linux-musl': ('linux', 2, 183, 'ARM64', 'static musl'),
     'aarch64-linux-android': ('android', 2, 183, 'arm64-v8a', 'Android API 24+'),
     'armv7-linux-androideabi': ('android', 1, 40, 'armeabi-v7a', 'Android API 24+'),
-    # Local packaging validation only; not a published work-workflow target.
+    # Local packaging validation only; not a development-workflow target.
     'x86_64-unknown-linux-gnu': ('linux', 2, 62, 'x86-64', 'glibc (local validation)'),
 }
 BINARIES = {'linux': ['kausway', 'kausway-host', 'kausway-admin', 'kausway-test-client'],
             'android': ['kausway-host', 'kausway-test-client']}
 ROOT_PACKAGES = {'linux': ['kausway-host', 'kausway-manager', 'kausway-admin'], 'android': ['kausway-host']}
 DOCS = ['docs/architecture/configuration-and-storage.md', 'docs/android/storage.md',
+        'docs/development/ci.md', 'docs/development/versioning.md', 'docs/operations/versions.md',
         'docs/operations/admin.md', 'docs/operations/manager.md', 'docs/operations/host-administration.md',
         'docs/operations/cli-reference.md', 'docs/operations/development-binaries.md',
         'docs/architecture/transport-policies.md', 'docs/integrations/application-suite.md',
@@ -214,6 +217,7 @@ def main():
                 shutil.copyfile(args.binary_dir / binary, tree / binary)
             files = {p.relative_to(tree).as_posix(): sha256(p) for p in sorted(tree.rglob('*')) if p.is_file()}
             manifest = {'format_version': 1, 'development': True, 'base_version': component_version, 'build_id': build_id,
+                        'ci': ci_context(args.commit),
                         'versions': {track: values['version'] for track, values in releases.items() if track != 'schema_version'},
                         'binary_versions': {name: expected_versions[name] for name in included},
                         'commit': args.commit, 'source_dirty': dirty, 'target': args.target, 'component': component,

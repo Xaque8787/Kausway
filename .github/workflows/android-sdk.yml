@@ -1,17 +1,9 @@
 name: Android SDK
 on:
-  push:
-    branches: ["**"]
-    paths: ['rust/**', 'sdks/android/**', 'examples/android-basic/**', 'scripts/android/**', '.github/workflows/android-sdk.yml']
-  pull_request:
-    paths: ['rust/**', 'sdks/android/**', 'examples/android-basic/**', 'scripts/android/**', '.github/workflows/android-sdk.yml']
   workflow_dispatch:
   workflow_call:
 permissions:
   contents: read
-concurrency:
-  group: android-sdk-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
 jobs:
   aar:
     runs-on: ubuntu-24.04
@@ -61,13 +53,21 @@ jobs:
       - name: Independent AAR consumer compiles
         working-directory: sdks/android
         run: ./gradlew :sample:assembleDebug :kausway-client:assembleDebugAndroidTest
+      - name: Stage SDK development artifact and provenance
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/sdk-development/native" "$RUNNER_TEMP/sdk-development/sample"
+          cp dist/kausway-client-android-"$VERSION".* "$RUNNER_TEMP/sdk-development/"
+          cp -R sdks/android/kausway-client/src/main/jniLibs/. "$RUNNER_TEMP/sdk-development/native/"
+          cp examples/android-basic/build/outputs/apk/debug/*.apk "$RUNNER_TEMP/sdk-development/sample/"
+          python3 scripts/ci/artifact-manifest.py --directory "$RUNNER_TEMP/sdk-development" \
+            --kind android-sdk --target android-arm64-armv7-x86_64 --commit "$GITHUB_SHA"
       - uses: actions/upload-artifact@v4
         with:
-          name: android-sdk-development-${{ steps.version.outputs.version }}
-          path: |
-            dist/kausway-client-android-${{ steps.version.outputs.version }}.*
-            sdks/android/kausway-client/src/main/jniLibs/*/*.so
-            examples/android-basic/build/outputs/apk/debug/*.apk
+          name: android-sdk-development-${{ steps.version.outputs.version }}-${{ github.sha }}-run${{ github.run_id }}-attempt${{ github.run_attempt }}
+          path: ${{ runner.temp }}/sdk-development/*
+          retention-days: 14
           if-no-files-found: error
       - name: Enable KVM access
         run: |
@@ -82,17 +82,26 @@ jobs:
           profile: pixel_2
           disable-animations: true
           script: bash scripts/android/emulator-e2e.sh
-      # Release payload is uploaded only after the emulator test succeeds.
-      - name: Upload SDK release assets
+      # Candidate payload is uploaded only after the emulator test succeeds.
+      - name: Stage validated SDK candidate
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/sdk-candidate"
+          cp dist/kausway-client-android-"$VERSION".* "$RUNNER_TEMP/sdk-candidate/"
+          python3 scripts/ci/artifact-manifest.py --directory "$RUNNER_TEMP/sdk-candidate" \
+            --kind android-sdk --target android-arm64-armv7-x86_64 --commit "$GITHUB_SHA"
+      - name: Upload validated SDK assets
         uses: actions/upload-artifact@v4
         with:
-          name: kausway-android-sdk
-          path: dist/kausway-client-android-${{ steps.version.outputs.version }}.*
+          name: kausway-android-sdk-${{ github.sha }}-run${{ github.run_id }}-attempt${{ github.run_attempt }}
+          path: ${{ runner.temp }}/sdk-candidate/*
+          retention-days: 14
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: android-sdk-test-results
+          name: android-sdk-test-results-${{ github.sha }}-run${{ github.run_id }}-attempt${{ github.run_attempt }}
           path: |
             sdks/android/kausway-client/build/reports/androidTests/
             sdks/android/kausway-client/build/outputs/androidTest-results/

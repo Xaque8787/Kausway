@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "workflow": ".github/workflows/build-validation.yml",
+  "required_jobs": {
+    "rust": "Rust lint, tests and suite integration",
+    "msrv": "Minimum supported Rust version",
+    "plugin": "Jellyfin build, tests and development package",
+    "docker": "Jellyfin image build and smoke test",
+    "binaries": "Linux and Android binary artifacts",
+    "android_sdk": "Android SDK build, consumer and emulator tests",
+    "containers": "AMD64/ARM64 suite images and embedding tests"
+  }
+}

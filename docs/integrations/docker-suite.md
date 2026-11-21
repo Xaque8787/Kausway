@@ -5,30 +5,24 @@ the development `kausway-test-client`. Its default command starts the manager
 with admin enabled. The manager owns its children; it does not adopt a host
 which another process already started.
 
-This workflow is introduced on `work`: **work builds do not publish to GHCR**.
-Published-image examples below become available after the workflow runs on main.
-Use a locally built image or a work Actions artifact until then.
+Development images are produced by **Build Validation** on any branch or PR and
+are downloadable Actions artifacts, not GHCR publications. The parent calls the
+read-only **Development containers** workflow on native AMD64/ARM64 runners, reusing
+verified binary archives from that same run. Both architectures run the suite and
+Alpine/Ubuntu embedding tests. See [CI details](../development/ci.md).
+
+Published-image examples below are for eventual stable distribution. Until a
+release is available, use a locally loaded artifact or source build. The separate
+**Legacy container publication** workflow still handles main/legacy tags during
+this intermediate phase; manual-only stable publication replaces it in 8.4.
+Do not interpret development artifact availability as a registry release.
 
 ## Buildx, publication and architectures
 
-The new **Container suite** workflow builds and tests on native AMD64 and ARM64
-runners using Buildx. Only after both succeed does it publish a multi-architecture
-image index. Existing binary release/Android workflows are unchanged.
-
-| Trigger | Result |
-| --- | --- |
-| Push to `work` | Two tested, downloadable Docker image archives; no registry login/push |
-| Push to `main` | GHCR multi-architecture `latest` and `sha-<full-commit>` tags |
-| Push `v<workspace-version>` tag | GHCR `<workspace-version>` and `sha-<full-commit>` tags; tagged commit must belong to main |
-| Manual run | Same branch/tag restrictions and publication rules |
-
-There is no automatic version bump and no GitHub Release creation. Version tags
-are produced only by an intentional version-tag push, not every main commit.
-`latest` tracks main; use a version tag or the **image-index digest** to pin an
-integration. A tag push does not move `latest`. Do not move/reuse release tags.
-For a first publication, the repository must permit Actions to write packages;
-the owner must also set the GHCR package visibility to public for anonymous pulls.
-If a package already exists, grant this repository Actions write access to it.
+Automatic development builds neither authenticate to GHCR nor move `latest`.
+The final release system will publish one multi-architecture index after both CPU
+variants pass. Integrations should pin a version or **image-index digest** rather
+than assume a development image is available under `latest`.
 
 ```sh
 docker pull ghcr.io/xaque8787/kausway:latest
@@ -59,7 +53,7 @@ For a build behind a TLS-inspecting proxy, the source Dockerfile accepts
 `--secret id=proxy_ca,src=/path/to/combined-ca-bundle.pem`. This temporary build
 mount is not included in the runtime image. Never disable certificate verification.
 
-Work Actions artifacts are single-platform Docker archives, not registry indexes:
+Development Actions artifacts are single-platform Docker archives, not registry indexes:
 
 ```sh
 gzip -dc kausway-suite-amd64.docker.tar.gz | docker load
@@ -311,6 +305,6 @@ restart the container. Use `kausway stop` to stop only its host while retaining 
 then copies its binaries into Alpine and Ubuntu consumers. It checks first-run
 link issuance, credential persistence/login, host identity persistence, manager
 start/stop, non-root/read-only operation, signal shutdown, all four entrypoint
-modes and application exit status. The workflow runs it natively for each CPU
-before publishing the combined index. A process-ready result is not an origin
+modes and application exit status. Development CI runs it natively for each CPU
+before exporting test image artifacts. A process-ready result is not an origin
 health check, and a successful image build alone is not a runtime test.

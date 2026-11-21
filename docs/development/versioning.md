@@ -68,6 +68,8 @@ To add another SDK to the shared client release:
 4. Register any new workspace Rust crate and assign its track.
 5. Add platform builds/tests, development artifacts, release asset inventory,
    distribution metadata and any signing configuration in the relevant workflows.
+   For new required CI jobs, update the parent graph, its summary dependencies and
+   `scripts/ci/validation-policy.json` together; see [CI details](ci.md).
 6. Document supported platforms and test that a client-only bump updates the new
    SDK while leaving suite/plugin/container versions unchanged.
 
@@ -110,11 +112,12 @@ both suite and client. Source-built image manifests identify the actual suite an
 container versions separately; final container publication from selected suite
 release assets is later Phase 8 work.
 
-**8.1 does not replace publication triggers.** The existing legacy tag/manual
+**8.1/8.2 do not finish publication redesign.** The existing legacy tag/manual
 binary publisher and main/tag container publisher still exist. Do not interpret
 the new manifest as the finished manual-only publication system, and do not use
 those old publishers as the new three-track release mechanism. Trigger replacement,
 asset separation and release preflight follow in subsequent Phase 8 parts.
+See [branch-independent CI](ci.md) for the 8.2 graph and artifact provenance.
 
 ## Acceptance checks
 
