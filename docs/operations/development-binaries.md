@@ -163,7 +163,7 @@ python3 scripts/ci/development-package-smoke.py /tmp/kausway-development-artifac
 The output directory must be empty. Unsupported/wrong-architecture binaries,
 dynamically linked musl inputs, unrelated workspace metadata or a non-HEAD commit
 are rejected rather than producing misleading artifacts. This development packager
-is separate from the legacy release packager; publication redesign is later Phase 8 work.
+is separate from [candidate assembly and manual publication](../development/publishing.md).
 
 For local GNU/Linux packaging validation only, the script also accepts
 `x86_64-unknown-linux-gnu`; this is not a published workflow target or a static musl

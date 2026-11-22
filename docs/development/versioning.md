@@ -29,7 +29,7 @@ are independent: changing one must not automatically change the others.
 
 The container's `suite_version` is an explicit dependency selection. It can refer
 to an older published suite; the sync command does not silently advance it when
-the suite version changes. A future publisher will verify the selected release exists.
+the suite version changes. The publisher verifies the selected release exists.
 
 Rust workspace members use explicit generated package versions. The workspace's
 default version remains synchronized to the suite for compatibility with existing
@@ -88,17 +88,17 @@ in artifact manifests instead.
 Jellyfin assembly/file/plugin versions use the suite's numeric core plus `.0`.
 The project's `Version` retains the full suite SemVer for informational metadata.
 Synchronization rejects suite components exceeding the assembly range `0..65534`.
-Both `0.5.0-rc.1` and `0.5.0` therefore build plugin `0.5.0.0`. Under the planned
+Both `0.5.0-rc.1` and `0.5.0` therefore build plugin `0.5.0.0`. Under the current
 release system plugin builds/tests still run for prereleases, but the plugin is
 distributed only with stable suite releases. The version helper exposes this
-distinction; publication inventory enforcement belongs to later Phase 8 work.
+distinction; candidate and publication inventory checks enforce it.
 
 ## Existing callers and the Phase 8 boundary
 
 `bash scripts/ci/check-version.sh` validates all registrations and prints the suite
 version for existing callers. `--track client` or `--track container` prints that
-track after validation. Legacy `v...` suite tag validation remains available until
-the publisher is replaced; track-prefixed tags can also be validated explicitly.
+track after validation. Legacy `v...` suite tag syntax remains accepted by the helper
+for compatibility; final publication creates only the track-prefixed tags.
 
 Scoped checks exist only for partial source Docker stages:
 
@@ -107,17 +107,12 @@ python3 scripts/releases/sync-versions.py --check --scope suite --print-version 
 ```
 
 Normal development and CI must use the default all-component check. Development
-archives record per-binary versions because legacy combined bundles can contain
-both suite and client. Source-built image manifests identify the actual suite and
-container versions separately; final container publication from selected suite
-release assets is later Phase 8 work.
+archives record per-binary versions; suite and client downloads are separate.
+Source-built image manifests identify suite and container versions separately;
+final container publication uses the selected published suite's exact binaries.
 
-**8.1/8.2 do not finish publication redesign.** The existing legacy tag/manual
-binary publisher and main/tag container publisher still exist. Do not interpret
-the new manifest as the finished manual-only publication system, and do not use
-those old publishers as the new three-track release mechanism. Trigger replacement,
-asset separation and release preflight follow in subsequent Phase 8 parts.
-See [branch-independent CI](ci.md) for the 8.2 graph and artifact provenance.
+See [branch-independent CI](ci.md) and [manual publication](publishing.md) for
+validation, version-advancement checks, immutable releases and retry behavior.
 
 ## Acceptance checks
 

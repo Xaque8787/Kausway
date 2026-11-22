@@ -47,7 +47,7 @@ outcomes and overall success. Failed summaries also upload evidence when possibl
 An absent report is not success. If the entire run is canceled, an earlier green
 job or saved report does not make that run successful.
 
-Phase 8.4's publisher must query the expected trusted main workflow run for the
+The manual publisher queries the expected trusted main workflow run for the
 candidate SHA and its applicable completed attempt, verify overall run success,
 and inspect this policy/evidence. It must not trust a similarly named check from
 another workflow or merely accept an artifact filename. PR checks use GitHub's
@@ -133,15 +133,13 @@ GitHub generally requires a workflow to exist on the default branch before showi
 its Run workflow button. Automatic parent calls work on development branches before
 that merge. Use the automatic Build Validation artifacts in the meantime.
 
-## Publication boundary during Phase 8
+## Publication boundary
 
 These development workflows have read-only repository permissions and no registry
-login/push or GitHub Release steps. The old container workflow is now explicitly
-named **Legacy container publication** and is not part of development validation;
-its automatic branch trigger is main only, with legacy tag behavior retained.
-The legacy Binaries publisher also still exists. Their replacement/removal belongs
-to 8.4: do not treat this intermediate state as the finished manual-only release
-system or merge it to main as a completed Phase 8 rollout.
+login/push or GitHub Release steps. **Publish release** is the only publisher:
+manual dispatch on main, with selected tracks and successful exact-commit main
+validation. The legacy Binaries and container publishers are removed. Main pushes
+and tag pushes produce no final publication. See [publication and recovery](publishing.md).
 
 Real-phone/media-server acceptance testing remains a documented manual exercise,
 not an additional approval or checklist gate in this CI graph.

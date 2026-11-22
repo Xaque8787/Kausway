@@ -35,7 +35,7 @@ through the Android SDK or development CLI. Jellyfin is the reference server int
 | `scripts/packaging/` | CLI archive and Jellyfin plugin packaging |
 | `protocol/` | Transport and control API contracts |
 | `docs/` | Current guides, architecture, operations and historical records |
-| `.github/workflows/` | Parent Build Validation, reusable development builds and legacy publishers pending Phase 8.4 |
+| `.github/workflows/` | Parent Build Validation, reusable development builds and manual main-only publication |
 
 ## Build and validate
 
@@ -53,8 +53,9 @@ docker compose -f deploy/jellyfin/compose.yaml up -d --build
 ```
 
 Build Validation runs on every branch/PR and automatically calls binary, Android SDK
-and container development builds. Download its artifacts for testing. The legacy
-publishers remain separate until Phase 8.4; development builds do not publish.
+and container development builds. Download its artifacts for testing. Only the
+manual main-branch [Publish release](docs/development/publishing.md) workflow publishes
+selected suite/client/container tracks; main pushes and Git tags do not publish.
 See [pinned versions](docs/operations/versions.md),
 [release version synchronization](docs/development/versioning.md),
 [transport policies](docs/architecture/transport-policies.md) and the
@@ -62,7 +63,8 @@ See [pinned versions](docs/operations/versions.md),
 
 Maven Central publication and iOS bindings are planned separately. The standalone
 suite deployment lives in `deploy/standalone/`; branch builds provide tested image
-artifacts. Legacy main/tag publication is being replaced later in Phase 8.
+artifacts. Stable GHCR releases use independent container versions and one
+AMD64/ARM64 index; `latest` advances only during a manual stable container release.
 
 Shared suite configuration and platform storage defaults are described in
 [configuration and storage](docs/architecture/configuration-and-storage.md).

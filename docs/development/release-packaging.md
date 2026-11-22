@@ -1,8 +1,7 @@
 # Release packaging (Phase 8.3)
 
-Packaging creates no Git tags, GitHub Releases or GHCR publications. Manual
-publication and release-state/API checks follow in 8.4. Existing legacy publishers
-must not be used as the new release model.
+Packaging creates no Git tags, GitHub Releases or GHCR publications. The separate
+[manual publisher](publishing.md) verifies state and promotes validated candidates.
 
 ## Product and asset boundaries
 
@@ -13,7 +12,7 @@ from `releases.toml`. Packaging does not bump or synchronize versions implicitly
 | --- | --- |
 | Suite | Linux AMD64/ARM64 suite + individual manager/host/admin archives; Android ARM64/ARMv7 host archives; stable-only Jellyfin ZIP |
 | Client | CLI archives for all four targets; Android AAR, POM, sources JAR, notices archive and README |
-| Container | Image descriptor recording index/platform digests, tags, selected suite and source identities; produced by the future publisher |
+| Container | Image descriptor recording index/platform digests, tags, selected suite and source identities; produced by the manual publisher |
 
 Suite archives/images contain only `kausway`, `kausway-host`, and `kausway-admin`.
 The CLI is separate. Android has individual host/client downloads, not a combined
@@ -91,8 +90,8 @@ must publish its selected suite before container publication. Update
 `container.suite_version` explicitly during release preparation.
 
 Container descriptor verification requires AMD64/ARM64 digests and one index for
-version/commit tags, plus `latest` for stable releases only. Actual registry
-inspection, publication, retries and rollback remain 8.4 responsibilities.
+version/commit tags, plus `latest` for stable releases only. Registry inspection,
+publication, retries and rollback are described in the [release guide](publishing.md).
 
 ## Tests
 

@@ -60,36 +60,42 @@ To pair a test device from another machine, use `kausway-test-client pair '<link
 
 ## Prebuilt binaries
 
-Builds are available through the **Binaries** workflow. Once a Kausway release is published, download them from [Kausway Releases](https://github.com/Xaque8787/Kausway/releases). Each release has one tarball per platform containing `kausway-host` and `kausway-test-client`, the Jellyfin plugin as a zip, a `.sha256` file for each, and a combined `SHA256SUMS`:
+Download published assets from [Kausway Releases](https://github.com/Xaque8787/Kausway/releases).
+New releases separate suite and client tracks. Each track has one release page
+containing all supported architectures, adjacent checksums and `SHA256SUMS`.
+Existing `v0.4.0` downloads retain their original combined layout.
 
 | File | Runs on |
 |---|---|
-| `kausway-<version>-x86_64-unknown-linux-musl.tar.gz` | Any 64-bit x86 Linux (static, no glibc requirement) |
-| `kausway-<version>-aarch64-unknown-linux-musl.tar.gz` | Any 64-bit ARM Linux, for example a Raspberry Pi 4/5 |
-| `kausway-<version>-android-arm64-v8a.tar.gz` | 64-bit Android 7+ (`adb shell` or Termux) |
-| `kausway-<version>-android-armeabi-v7a.tar.gz` | 32-bit Android 7+, common on Android TV devices |
-| `kausway-<version>-jellyfin-plugin.zip` | Jellyfin 12.4: unzip into the server's `plugins` directory and restart |
+| `kausway-host-<suite-version>-x86_64-unknown-linux-musl.tar.gz` | 64-bit x86 Linux (static, no glibc requirement) |
+| `kausway-host-<suite-version>-aarch64-unknown-linux-musl.tar.gz` | 64-bit ARM Linux |
+| `kausway-host-<suite-version>-aarch64-linux-android.tar.gz` | 64-bit Android 7+ (`adb shell` or Termux) |
+| `kausway-host-<suite-version>-armv7-linux-androideabi.tar.gz` | 32-bit ARM Android 7+ |
+| `JellyfinKausway_<suite-version>.0.zip` | Stable suite releases only; install into Jellyfin's plugins directory |
+
+Linux also has standalone manager/admin archives and a combined
+`kausway-suite-<suite-version>-<target>.tar.gz` containing all three suite binaries.
+Download `kausway-test-client-<client-version>-<target>.tar.gz` from the client
+release for the separate CLI. See [complete asset policy](../development/release-packaging.md).
 
 ```sh
 sha256sum -c --ignore-missing SHA256SUMS
 ```
 
-The Linux builds pass the same end-to-end test as CI before publishing. The Android builds are compiled but not run in CI. The test client is for development and testing only.
-
-For a test build without a release, run the **Binaries** workflow from the Actions tab (Run workflow) with **publish** unticked. The same files are attached to that run as artifacts.
+Linux binaries pass native runtime tests. Android CLI binaries are cross-compiled
+and inspected; the SDK additionally runs real-host emulator tests. The CLI is for
+development/testing. For unreleased builds, download **Build Validation** artifacts
+from a successful run on any branch; see [artifact instructions](../development/ci.md).
 
 ### Making a release
 
-One version number covers the whole project. To release `X.Y.Z`:
-
-1. Set `version = "X.Y.Z"` in `rust/Cargo.toml` and run `cargo update --workspace` in `rust/` so `Cargo.lock` follows.
-2. Set the plugin version to `X.Y.Z.0` in `integrations/jellyfin/meta.json` and in `AssemblyVersion` and `FileVersion` in `Jellyfin.Plugin.Kausway.csproj`.
-3. Run `scripts/ci/check-version.sh` and commit to the default branch.
-4. Start the release, either way:
-   - From the Actions tab: **Binaries**, Run workflow on the default branch, tick **publish**. The workflow creates the `vX.Y.Z` tag on that commit.
-   - From git: `git tag vX.Y.Z && git push origin vX.Y.Z`.
-
-The **Binaries** workflow then checks that every version agrees (and matches the tag), builds and tests all platforms and the plugin, and publishes the release with generated notes. If any step fails, nothing is published and no tag is created by a manual run. A manual publish stops straight away if that version was already released. Versions with a suffix, such as `0.4.0-beta.1`, are marked as pre-releases; their plugin version is still `0.4.0.0`.
+Edit the independent track versions in `releases.toml`, run
+`python3 scripts/releases/sync-versions.py`, and commit the synchronized files.
+After branch validation, merge to main and wait for that exact commit's **Build
+Validation** to pass. Manually dispatch **Publish release** on main and select the
+desired suite/client/container tracks. Main pushes and Git tags do not publish.
+See the [release guide](../development/publishing.md) for pinning, checks, retries
+and prerelease/plugin rules. Successful tracks remain published if another fails.
 
 ## Building the host without Docker
 
@@ -164,16 +170,9 @@ The separate **Android SDK** workflow builds the AAR and independent sample.
 
 ### Coordinated releases
 
-Starting with v0.4.0, host/CLI binaries, the Jellyfin plugin and Android SDK share
-one project release version. **Binaries** also runs the reusable Android SDK
-workflow and waits for its emulator tests. Successful publishing attaches the
-versioned `.aar`, its POM and checksums directly to the GitHub Release alongside
-the executable archives and plugin zip; Maven Central is not required.
-
-Update `rust/Cargo.toml` and the plugin versions, run `cargo update --workspace`
-in `rust/`, then `bash scripts/ci/check-version.sh`. The Android version and file
-names follow the workspace version automatically. Merge to `main`, wait for Build
-Validation and Android SDK checks, then push the matching `vX.Y.Z` tag (or run
-**Binaries** on `main` with **Publish** selected). Release tags must point to a
-commit on the default branch. Manual builds with **Publish** unchecked remain
-available on development branches.
+The client engine, CLI and Android SDK share the **client** release track; suite
+and container versions can differ. A client release includes the versioned AAR,
+POM, sources, notices, README and checksums on GitHub; Maven Central is not required.
+Build Validation requires the reusable SDK workflow's emulator tests before
+assembling the client candidate. See [versioning](../development/versioning.md)
+and [manual publication](../development/publishing.md).

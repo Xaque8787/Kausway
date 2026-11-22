@@ -1,0 +1,267 @@
+name: Publish release
+
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: Publish suite binaries and stable-only Jellyfin plugin
+        type: boolean
+        default: false
+      client:
+        description: Publish client CLI and Android SDK
+        type: boolean
+        default: false
+      container:
+        description: Publish container using container.suite_version
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# Repository-wide serialization, including reruns. GitHub retains only one pending
+# run, so this is mutual exclusion, not a FIFO release queue.
+concurrency:
+  group: release-publication
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+      checks: read
+    outputs:
+      plan_artifact: ${{ steps.plan.outputs.artifact }}
+      suite: ${{ steps.plan.outputs.suite }}
+      client: ${{ steps.plan.outputs.client }}
+      container: ${{ steps.plan.outputs.container }}
+      container_state: ${{ steps.plan.outputs.container_state }}
+      container_version: ${{ steps.plan.outputs.container_version }}
+      container_needs_suite: ${{ steps.plan.outputs.container_needs_suite }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify pinned main commit, exact CI evidence and release state
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SELECT_SUITE: ${{ inputs.suite }}
+          SELECT_CLIENT: ${{ inputs.client }}
+          SELECT_CONTAINER: ${{ inputs.container }}
+        run: |
+          tracks=()
+          if [[ "$SELECT_SUITE" == true ]]; then tracks+=(--suite); fi
+          if [[ "$SELECT_CLIENT" == true ]]; then tracks+=(--client); fi
+          if [[ "$SELECT_CONTAINER" == true ]]; then tracks+=(--container); fi
+          python3 scripts/releases/publish-release.py preflight "${tracks[@]}" \
+            --work "$RUNNER_TEMP/preflight" --output "$RUNNER_TEMP/release-plan.json"
+          echo "artifact=release-plan-$GITHUB_SHA-run$GITHUB_RUN_ID-attempt$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.plan.outputs.artifact }}
+          path: ${{ runner.temp }}/release-plan.json
+          if-no-files-found: error
+          retention-days: 30
+
+  publish_suite:
+    needs: preflight
+    if: needs.preflight.outputs.suite == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: read
+      checks: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.preflight.outputs.plan_artifact }}
+          path: ${{ runner.temp }}/plan
+      - name: Promote verified suite candidate without rebuilding
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/releases/publish-release.py binary --track suite \
+            --plan "$RUNNER_TEMP/plan/release-plan.json" --work "$RUNNER_TEMP/publish-suite"
+
+  publish_client:
+    needs: preflight
+    if: needs.preflight.outputs.client == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: read
+      checks: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.preflight.outputs.plan_artifact }}
+          path: ${{ runner.temp }}/plan
+      - name: Promote verified client and SDK candidate without rebuilding
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/releases/publish-release.py binary --track client \
+            --plan "$RUNNER_TEMP/plan/release-plan.json" --work "$RUNNER_TEMP/publish-client"
+
+  container_build:
+    needs: [preflight, publish_suite]
+    if: >-
+      always() && !cancelled() && needs.preflight.result == 'success' &&
+      needs.preflight.outputs.container == 'true' &&
+      needs.preflight.outputs.container_state != 'complete' &&
+      (needs.preflight.outputs.container_needs_suite == 'false' ||
+       needs.publish_suite.result == 'success' || needs.publish_suite.result == 'skipped')
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            target: x86_64-unknown-linux-musl
+            runner: ubuntu-24.04
+          - arch: arm64
+            target: aarch64-unknown-linux-musl
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
+      checks: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.preflight.outputs.plan_artifact }}
+          path: ${{ runner.temp }}/plan
+      - name: Download and verify published selected suite
+        id: suite
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/releases/publish-release.py prepare-container \
+            --plan "$RUNNER_TEMP/plan/release-plan.json" --work "$RUNNER_TEMP/prepare" \
+            --output "$RUNNER_TEMP/selected-suite"
+          python3 scripts/packaging/stage-container-release.py \
+            --release "$RUNNER_TEMP/selected-suite" --target "${{ matrix.target }}" \
+            --commit "$GITHUB_SHA" --output "$RUNNER_TEMP/suite-context"
+      - uses: docker/setup-buildx-action@v3
+      - name: Build once, export exact OCI bytes for tests and publication
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ runner.temp }}/suite-context
+          file: deploy/standalone/runtime.Dockerfile
+          platforms: linux/${{ matrix.arch }}
+          provenance: false
+          sbom: false
+          outputs: type=oci,dest=${{ runner.temp }}/suite.oci.tar
+          tags: kausway-suite:release
+          build-args: |
+            VCS_REF=${{ github.sha }}
+            CONTAINER_VERSION=${{ needs.preflight.outputs.container_version }}
+            SUITE_VERSION=${{ steps.suite.outputs.suite_version }}
+            SUITE_SOURCE_COMMIT=${{ steps.suite.outputs.suite_commit }}
+            SUITE_MANIFEST_SHA256=${{ steps.suite.outputs.suite_manifest_sha256 }}
+      - name: Test loaded OCI bytes, suite identity, persistence and downstream copies
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/releases/publish-release.py test-image \
+            --plan "$RUNNER_TEMP/plan/release-plan.json" --work "$RUNNER_TEMP/test-image" \
+            --oci "$RUNNER_TEMP/suite.oci.tar" --context "$RUNNER_TEMP/suite-context" \
+            --platform "linux/${{ matrix.arch }}" --receipt "$RUNNER_TEMP/tested-image.json"
+      - name: Upload the tested bytes by digest, without public release tags
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/records"
+          python3 scripts/releases/publish-release.py push-image \
+            --plan "$RUNNER_TEMP/plan/release-plan.json" --work "$RUNNER_TEMP/push-image" \
+            --oci "$RUNNER_TEMP/suite.oci.tar" --platform "linux/${{ matrix.arch }}" \
+            --receipt "$RUNNER_TEMP/tested-image.json" --output "$RUNNER_TEMP/records/platform-${{ matrix.arch }}.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-platform-${{ matrix.arch }}-${{ github.sha }}-run${{ github.run_id }}-attempt${{ github.run_attempt }}
+          path: ${{ runner.temp }}/records/platform-*.json
+          if-no-files-found: error
+          retention-days: 30
+
+  publish_container:
+    needs: [preflight, publish_suite, container_build]
+    if: >-
+      always() && !cancelled() && needs.preflight.result == 'success' &&
+      needs.preflight.outputs.container == 'true' &&
+      (needs.preflight.outputs.container_needs_suite == 'false' ||
+       needs.publish_suite.result == 'success' || needs.publish_suite.result == 'skipped') &&
+      (needs.container_build.result == 'success' || needs.container_build.result == 'skipped')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: read
+      checks: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.preflight.outputs.plan_artifact }}
+          path: ${{ runner.temp }}/plan
+      - uses: actions/download-artifact@v4
+        if: needs.preflight.outputs.container_state != 'complete'
+        with:
+          pattern: release-platform-*-${{ github.sha }}-run${{ github.run_id }}-attempt*
+          path: ${{ runner.temp }}/records
+          merge-multiple: false
+      - name: Verify both digests, publish one index and finish release tags
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/releases/publish-release.py container \
+            --plan "$RUNNER_TEMP/plan/release-plan.json" --work "$RUNNER_TEMP/publish-container" \
+            --records "$RUNNER_TEMP/records"
+
+  summary:
+    if: always()
+    needs: [preflight, publish_suite, publish_client, container_build, publish_container]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Report independent track results
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+          REF: ${{ github.ref }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          results = json.loads(os.environ['RESULTS'])
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as report:
+              report.write('## Publication results\n\n')
+              report.write(f"Dispatch ref: `{os.environ['REF']}`; pinned commit: `{os.environ['GITHUB_SHA']}`\n\n")
+              for name, item in results.items():
+                  report.write(f"- {name}: {item['result']}\n")
+          if results['preflight']['result'] != 'success' or any(item['result'] in ('failure', 'cancelled') for item in results.values()):
+              raise SystemExit('Publication incomplete; inspect individual jobs and retry safely.')
+          PY

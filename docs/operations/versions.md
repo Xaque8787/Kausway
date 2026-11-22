@@ -21,7 +21,8 @@ Full digests are in the Dockerfile.
 ## Policy
 
 - Build dependency/base images do not use `latest`. The suite deliberately publishes
-  a `latest` convenience tag from main; integrations should pin a version or index digest.
+  a `latest` convenience tag only on a manual stable container release from main;
+  integrations should pin a version or index digest.
 - Upgrading Iroh means re-verifying the API, then re-running the transport tests and the real-network checks in `docs/architecture/transport-policies.md`.
 - Upgrading Jellyfin means changing the image, the two SDK packages and `targetAbi` together.
 - `cargo update` is a deliberate change reviewed in its own commit.

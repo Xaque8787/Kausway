@@ -8,31 +8,41 @@ The host and client can run on the same computer or on separate computers.
 
 Open [Kausway Releases](https://github.com/Xaque8787/Kausway/releases) and download
 the archive for **the computer that will run each binary**. If no release has been
-published, open [Actions → Binaries](https://github.com/Xaque8787/Kausway/actions/workflows/binaries.yml),
+published in the new layout, open [Actions → Build Validation](https://github.com/Xaque8787/Kausway/actions/workflows/build-validation.yml),
 select a successful run and download its platform artifact (GitHub sign-in may be
 required). Extract the artifact ZIP, then its contained `.tar.gz` archive.
 
-Each archive contains **both** `kausway-host` and `kausway-test-client`. On one
-computer you need only one archive. On two computers, download the matching archive
-on each; their operating systems/architectures may differ. Use the same project version.
+Download the standalone **host** archive from the suite release and the separate
+**test-client** archive from the client release. Extract each and copy its executable
+into a working directory such as `kausway-test-tools`; the following commands use
+that directory. If they run on different computers, download the matching CPU for
+each. Suite/client versions are independent. Legacy `v0.4.0` assets retain their
+original combined layout; use their actual filenames when checking/extracting.
 
 | Computer | Archive suffix |
 |---|---|
 | Linux x86_64, including Linux inside WSL | `x86_64-unknown-linux-musl.tar.gz` |
 | Linux ARM64 | `aarch64-unknown-linux-musl.tar.gz` |
-| Android ARM64, via adb shell or a suitable terminal environment | `android-arm64-v8a.tar.gz` |
-| Android 32-bit ARM | `android-armeabi-v7a.tar.gz` |
+| Android ARM64, via adb shell or a suitable terminal environment | `aarch64-linux-android.tar.gz` |
+| Android 32-bit ARM | `armv7-linux-androideabi.tar.gz` |
 
-The full filename is `kausway-<version>-<suffix>`. Native Windows and macOS CLI
+The full filename is `kausway-host-<suite-version>-<suffix>` or
+`kausway-test-client-<client-version>-<suffix>`. Development filenames additionally
+include their build suffix. Native Windows and macOS CLI
 binaries are not currently built. The Android CLI archives are different from the
 Android SDK AAR and do not contain an Android application.
 
 On Linux, in your download directory, substitute the actual version and filename:
 
 ```sh
-sha256sum -c kausway-<version>-x86_64-unknown-linux-musl.tar.gz.sha256
-tar -xzf kausway-<version>-x86_64-unknown-linux-musl.tar.gz
-cd kausway-<version>-x86_64-unknown-linux-musl
+sha256sum -c kausway-host-<suite-version>-x86_64-unknown-linux-musl.tar.gz.sha256
+sha256sum -c kausway-test-client-<client-version>-x86_64-unknown-linux-musl.tar.gz.sha256
+tar -xzf kausway-host-<suite-version>-x86_64-unknown-linux-musl.tar.gz
+tar -xzf kausway-test-client-<client-version>-x86_64-unknown-linux-musl.tar.gz
+mkdir -p kausway-test-tools
+cp kausway-host-<suite-version>-x86_64-unknown-linux-musl/kausway-host kausway-test-tools/
+cp kausway-test-client-<client-version>-x86_64-unknown-linux-musl/kausway-test-client kausway-test-tools/
+cd kausway-test-tools
 chmod +x kausway-host kausway-test-client
 ./kausway-host --version
 ./kausway-test-client --version

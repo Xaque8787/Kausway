@@ -12,17 +12,18 @@ verified binary archives from that same run. Both architectures run the suite an
 Alpine/Ubuntu embedding tests. See [CI details](../development/ci.md).
 
 Published-image examples below are for eventual stable distribution. Until a
-release is available, use a locally loaded artifact or source build. The separate
-**Legacy container publication** workflow still handles main/legacy tags during
-this intermediate phase; manual-only stable publication replaces it in 8.4.
+release is available, use a locally loaded artifact or source build. Only the
+manual main-branch **Publish release** workflow publishes final images.
 Do not interpret development artifact availability as a registry release.
 
 ## Buildx, publication and architectures
 
 Automatic development builds neither authenticate to GHCR nor move `latest`.
-The final release system will publish one multi-architecture index after both CPU
+The final release system publishes one multi-architecture index after both CPU
 variants pass. Integrations should pin a version or **image-index digest** rather
-than assume a development image is available under `latest`.
+than assume a development image is available under `latest`. That tag tracks the
+most recent published stable container release, not main; prereleases never move
+it. See [publication and recovery](../development/publishing.md).
 
 ```sh
 docker pull ghcr.io/xaque8787/kausway:latest
@@ -48,7 +49,9 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 The source Dockerfile compiles static musl binaries. CI compiles on native runners,
 verifies ELF architecture/static linkage, stages notices with
 `scripts/packaging/stage-container.py`, and uses `runtime.Dockerfile`. The runtime
-contract is the same. Neither path downloads executable release archives.
+contract is the same. Development source builds do not download release binaries.
+Final container publication instead verifies the explicitly selected suite release
+and stages its existing binaries with `stage-container-release.py`.
 For a build behind a TLS-inspecting proxy, the source Dockerfile accepts
 `--secret id=proxy_ca,src=/path/to/combined-ca-bundle.pem`. This temporary build
 mount is not included in the runtime image. Never disable certificate verification.

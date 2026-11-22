@@ -33,8 +33,16 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 
 FROM alpine:3.22@sha256:49340b346798875b5592e5d420241f2f9cfba5f47e62ebb1446a1b34734e898f AS runtime
 ARG VCS_REF=unknown
+ARG CONTAINER_VERSION=unknown
+ARG SUITE_VERSION=unknown
+ARG SUITE_SOURCE_COMMIT=unknown
+ARG SUITE_MANIFEST_SHA256=unknown
 LABEL org.opencontainers.image.source="https://github.com/Xaque8787/Kausway" \
       org.opencontainers.image.revision="$VCS_REF" \
+      org.opencontainers.image.version="$CONTAINER_VERSION" \
+      io.kausway.suite.version="$SUITE_VERSION" \
+      io.kausway.suite.commit="$SUITE_SOURCE_COMMIT" \
+      io.kausway.suite.manifest="$SUITE_MANIFEST_SHA256" \
       org.opencontainers.image.licenses="MIT OR Apache-2.0"
 RUN addgroup -g 10001 kausway && adduser -D -u 10001 -G kausway kausway \
     && mkdir /config /data && chown 10001:10001 /config /data
