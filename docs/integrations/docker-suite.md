@@ -1,7 +1,7 @@
 # Docker suite and application integration (Phase 7)
 
-The suite image contains `kausway` (manager), `kausway-host`, `kausway-admin`, and
-the development `kausway-test-client`. Its default command starts the manager
+The suite image contains `kausway` (manager), `kausway-host` and `kausway-admin`.
+The CLI client is a separate client-track download. Its default command starts the manager
 with admin enabled. The manager owns its children; it does not adopt a host
 which another process already started.
 

@@ -86,8 +86,8 @@ class ValidationTests(unittest.TestCase):
 
     def test_container_accepts_only_matching_run_artifact(self):
         artifact = {'commit': self.sha, 'target': 'x86_64-unknown-linux-musl', 'component': 'suite',
-                    'source_dirty': False, 'ci': self.context, 'binary_versions': container_tool.binary_versions(ROOT),
-                    'versions': {k: v['version'] for k, v in container_tool.load_release(ROOT).items() if k != 'schema_version'}}
+                    'source_dirty': False, 'ci': self.context, 'binary_versions': {name: container_tool.binary_versions(ROOT)[name] for name in container_tool.SUITE},
+                    'versions': {'suite': container_tool.load_release(ROOT)['suite']['version']}}
         with patch.dict(os.environ, self.env, clear=True):
             container_tool.check_provenance(artifact, self.sha, artifact['target'])
             for key, value in [('commit', 'b' * 40), ('target', 'aarch64-unknown-linux-musl'),
@@ -106,8 +106,8 @@ class ValidationTests(unittest.TestCase):
 
     def test_local_development_can_use_downloaded_ci_archive(self):
         artifact = {'commit': self.sha, 'target': 'x86_64-unknown-linux-musl', 'component': 'suite',
-                    'source_dirty': False, 'ci': self.context, 'binary_versions': container_tool.binary_versions(ROOT),
-                    'versions': {k: v['version'] for k, v in container_tool.load_release(ROOT).items() if k != 'schema_version'}}
+                    'source_dirty': False, 'ci': self.context, 'binary_versions': {name: container_tool.binary_versions(ROOT)[name] for name in container_tool.SUITE},
+                    'versions': {'suite': container_tool.load_release(ROOT)['suite']['version']}}
         with patch.dict(os.environ, {}, clear=True):
             container_tool.check_provenance(artifact, self.sha, artifact['target'])
 

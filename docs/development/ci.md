@@ -22,6 +22,7 @@ never qualifies a commit for publication.
 - Linux AMD64/ARM64 and Android ARM64/ARMv7 binary builds/packages.
 - Android SDK, independent consumer and real-host emulator checks.
 - AMD64/ARM64 suite containers and Alpine/Ubuntu embedding tests.
+- Complete suite/client release candidate inventories and payload validation.
 
 The parent workflow calls reusable binary, Android and container workflows. The
 container job reuses the verified Linux binary archives from the same run instead
@@ -68,6 +69,7 @@ development version and target; manifests include each binary's actual track ver
 | `development-jellyfin-plugin-...` | Plugin ZIP, checksum inventory and provenance |
 | `development-suite-image-amd64-...` / `arm64-...` | Tested Docker image archive, checksum and provenance |
 | `validation-summary-...` | Aggregate validation evidence |
+| `release-candidate-suite-...` / `release-candidate-client-...` | Complete verified release-layout candidates; not published releases |
 
 The existence of a build artifact is not proof the whole validation passed. Check
 the summary, especially for early SDK artifacts. Diagnostics/corrected-lock/format

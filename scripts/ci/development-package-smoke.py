@@ -8,14 +8,18 @@ import os
 from pathlib import Path, PurePosixPath
 import re
 import socket
+import shutil
+import sys
 import subprocess
 import tarfile
 import tempfile
 import time
 import tomllib
 
-BINS = {'linux': ['kausway', 'kausway-host', 'kausway-admin', 'kausway-test-client'],
-        'android': ['kausway-host', 'kausway-test-client']}
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'releases'))
+from layout import CLIENT, SUITE, groups
+
+BINS = {'linux': SUITE + CLIENT, 'android': ['kausway-host'] + CLIENT}
 FORBIDDEN = {'identity.key', 'client.key', 'control.token', 'state.json', 'config.toml',
              'host.lock', 'admin.lock', 'manager.lock', 'control.sock', '.git', '.env'}
 ROOT = Path(__file__).resolve().parents[2]
@@ -50,15 +54,17 @@ def verify_archive(path, expected, destination):
         archive.extractall(destination, filter='data')
     root = destination / path.name.removesuffix('.tar.gz')
     manifest = json.loads((root / 'BUILD-INFO.json').read_text())
-    if manifest['format_version'] != 1 or manifest['development'] is not True:
-        raise ValueError('Not a development package manifest')
+    if manifest['format_version'] != 1 or (manifest['development'] is not True and manifest.get('release_candidate') is not True):
+        raise ValueError('Not a recognized binary package manifest')
     if not re.fullmatch('[0-9a-f]{40}', manifest['commit']):
         raise ValueError('Invalid package commit')
-    identity = f"{manifest['base_version']}-dev.g{manifest['commit'][:12]}"
+    identity = (f"{manifest['base_version']}-dev.g{manifest['commit'][:12]}" if manifest['development'] else manifest['base_version'])
     if manifest['build_id'] != identity or identity not in path.name:
         raise ValueError('Development provenance does not match the archive')
-    expected_bins = BINS[manifest['platform']] if manifest['component'] in ['suite', 'android-cli'] else [
-        'kausway' if manifest['component'] == 'manager' else 'kausway-' + manifest['component']]
+    entries = [entry for entry in groups(manifest['target']) if entry[1] == manifest['component']]
+    if len(entries) != 1 or manifest['release_track'] != entries[0][0]:
+        raise ValueError('Incorrect release track/component')
+    expected_bins = entries[0][2]
     if manifest['binaries'] != expected_bins:
         raise ValueError('Incorrect component binary inventory')
     expected_versions = {name: manifest['versions']['client' if name == 'kausway-test-client' else 'suite'] for name in expected_bins}
@@ -211,14 +217,14 @@ def main():
         raise ValueError('Missing or unexpected archive')
     with tempfile.TemporaryDirectory(prefix='kausway-extracted-') as temporary:
         temp = Path(temporary)
-        suites = []
+        payloads = {}
         identities = set()
         components = set()
         binary_hashes = {}
         for path in archives:
             assert path.with_name(path.name + '.sha256').read_text() == f'{sums[path.name]}  {path.name}\n'
             root, manifest = verify_archive(path, sums[path.name], temp)
-            identities.add((manifest['commit'], manifest['target'], json.dumps(manifest['versions'], sort_keys=True)))
+            identities.add((manifest['commit'], manifest['target'], json.dumps(manifest['ci'], sort_keys=True)))
             components.add(manifest['component'])
             for binary in manifest['binaries']:
                 current = manifest['files'][binary]
@@ -230,12 +236,10 @@ def main():
                     raise ValueError('Do not execute Android packages on a Linux runner')
                 for binary in manifest['binaries']:
                     subprocess.run([str(root / binary), '--help'], capture_output=True, check=True)
-            if manifest['component'] in ['suite', 'android-cli']:
-                suites.append((root, manifest))
-        if len(identities) != 1 or len(suites) != 1:
+            payloads[manifest['component']] = (root, manifest)
+        if len(identities) != 1:
             raise ValueError('Mixed build provenance or missing suite')
-        suite, manifest = suites[0]
-        expected_components = {'suite', 'manager', 'host', 'admin', 'test-client'} if manifest['platform'] == 'linux' else {'android-cli', 'host', 'test-client'}
+        expected_components = {component for _, component, _ in groups(manifest['target'])}
         if components != expected_components:
             raise ValueError('Incomplete component archive set')
         # Corruption must be rejected before extraction/execution.
@@ -245,10 +249,20 @@ def main():
         except ValueError as error:
             assert 'Checksum mismatch' in str(error)
         if args.run:
-            run_suite(suite, manifest['binary_versions'], temp / 'runtime')
+            suite, manifest = payloads['suite']
+            combined = temp / 'runtime-binaries'
+            combined.mkdir()
+            versions = {}
+            for component in ['suite', 'test-client']:
+                source, info = payloads[component]
+                versions.update(info['binary_versions'])
+                for name in info['binaries']:
+                    shutil.copyfile(source / name, combined / name)
+                    (combined / name).chmod(0o755)
+            run_suite(combined, versions, temp / 'runtime')
             env = {key: value for key, value in os.environ.items() if not key.startswith('KAUSWAY_')}
             env['KAUSWAY_CONFIG'] = str(temp / 'e2e-config/config.toml')
-            result = subprocess.run(['bash', str(ROOT / 'scripts/ci/e2e.sh'), str(suite)], env=env,
+            result = subprocess.run(['bash', str(ROOT / 'scripts/ci/e2e.sh'), str(combined)], env=env,
                                     capture_output=True, text=True, timeout=120)
             if result.returncode:
                 print(result.stdout[-12000:])

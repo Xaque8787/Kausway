@@ -1,0 +1,45 @@
+name: Release candidate packages
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  assemble:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        track: [suite, client]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: development-kausway-*-run${{ github.run_id }}-attempt*
+          path: ${{ runner.temp }}/release-inputs/binaries
+      - uses: actions/download-artifact@v4
+        if: matrix.track == 'suite'
+        with:
+          pattern: development-jellyfin-plugin-${{ github.sha }}-run${{ github.run_id }}-attempt*
+          path: ${{ runner.temp }}/release-inputs/plugin
+      - uses: actions/download-artifact@v4
+        if: matrix.track == 'client'
+        with:
+          pattern: kausway-android-sdk-${{ github.sha }}-run${{ github.run_id }}-attempt*
+          path: ${{ runner.temp }}/release-inputs/sdk
+      - name: Assemble and verify exact track inventory (no publication)
+        run: |
+          python3 scripts/releases/package-candidate.py --track "${{ matrix.track }}" \
+            --inputs "$RUNNER_TEMP/release-inputs" --output "$RUNNER_TEMP/release-candidate" \
+            --commit "$GITHUB_SHA" --validation-run-id "$GITHUB_RUN_ID" --validation-attempt "$GITHUB_RUN_ATTEMPT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-candidate-${{ matrix.track }}-${{ github.sha }}-run${{ github.run_id }}-attempt${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-candidate/*
+          retention-days: 14
+          compression-level: 0
+          if-no-files-found: error

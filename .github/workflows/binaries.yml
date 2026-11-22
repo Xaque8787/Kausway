@@ -265,7 +265,7 @@ jobs:
           if [[ $TAG == *-* ]]; then prerelease=(--prerelease); fi
           # Upload only flat release payloads, never directories or development outputs.
           shopt -s nullglob
-          assets=(./*.tar.gz ./*.zip ./*.aar ./*.pom ./*.sha256 ./SHA256SUMS)
+          assets=(./*.tar.gz ./*.zip ./*.aar ./*.pom ./*.jar ./kausway-client-android-*-README.md ./*.sha256 ./SHA256SUMS)
           for asset in "${assets[@]}"; do
             test -f "$asset" || { echo "::error::Missing release asset: $asset"; exit 1; }
           done

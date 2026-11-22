@@ -8,6 +8,7 @@
     "docker": "Jellyfin image build and smoke test",
     "binaries": "Linux and Android binary artifacts",
     "android_sdk": "Android SDK build, consumer and emulator tests",
-    "containers": "AMD64/ARM64 suite images and embedding tests"
+    "containers": "AMD64/ARM64 suite images and embedding tests",
+    "release_candidates": "Complete suite/client release inventories and checksums"
   }
 }

@@ -19,7 +19,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     && CC=musl-gcc cargo build --manifest-path rust/Cargo.toml --release --locked --target "$target" \
        -p kausway-manager -p kausway-host -p kausway-admin --bins \
     && mkdir /binaries \
-    && for binary in kausway kausway-host kausway-admin kausway-test-client; do cp "rust/target/$target/release/$binary" /binaries/; done \
+    && for binary in kausway kausway-host kausway-admin; do cp "rust/target/$target/release/$binary" /binaries/; done \
     && cargo metadata --manifest-path rust/Cargo.toml --locked --format-version 1 --filter-platform "$target" > /metadata.json
 COPY scripts/packaging/ scripts/packaging/
 COPY scripts/ci/provenance.py scripts/ci/provenance.py

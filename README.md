@@ -9,6 +9,7 @@ through the Android SDK or development CLI. Jellyfin is the reference server int
 
 - [Development binary downloads](docs/operations/development-binaries.md): branch-independent suite/component archives, targets, checksums and first launch.
 - [CI and development artifacts](docs/development/ci.md): required validation summary, SDK/plugin/image downloads and local container builds.
+- [Release packaging](docs/development/release-packaging.md): separate track inventories, prerelease rules and selected-suite container staging.
 
 - [Quick start: local testing](docs/getting-started/local-testing.md): download the CLIs, start a host, pair a client and access any HTTP origin.
 - [Complete CLI reference](docs/operations/cli-reference.md): every command, argument and environment variable.

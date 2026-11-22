@@ -13,6 +13,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / 'scripts/releases'))
 from versions import binary_versions, load_release
+from layout import SUITE
 sys.path.insert(0, str(ROOT / 'scripts/ci'))
 from provenance import ci_context
 
@@ -32,9 +33,9 @@ def check_provenance(manifest, commit, target, allow_dirty=False):
         attempt = source.get('run_attempt', '')
         if not re.fullmatch('[1-9][0-9]*', attempt) or int(attempt) > int(context['run_attempt']):
             raise ValueError('Suite artifact has an invalid/future CI attempt')
-    if manifest['binary_versions'] != binary_versions(ROOT):
+    if manifest['binary_versions'] != {name: binary_versions(ROOT)[name] for name in SUITE}:
         raise ValueError('Suite artifact versions do not match this checkout')
-    expected = {track: value['version'] for track, value in load_release(ROOT).items() if track != 'schema_version'}
+    expected = {'suite': load_release(ROOT)['suite']['version']}
     if manifest['versions'] != expected:
         raise ValueError('Suite artifact release manifest does not match this checkout')
 

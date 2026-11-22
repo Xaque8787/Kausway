@@ -20,6 +20,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'releases'))
 from versions import binary_versions, check_metadata, load_release
+from layout import CLIENT, SUITE, groups
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'ci'))
 from provenance import ci_context
 
@@ -32,11 +33,11 @@ TARGETS = {
     # Local packaging validation only; not a development-workflow target.
     'x86_64-unknown-linux-gnu': ('linux', 2, 62, 'x86-64', 'glibc (local validation)'),
 }
-BINARIES = {'linux': ['kausway', 'kausway-host', 'kausway-admin', 'kausway-test-client'],
-            'android': ['kausway-host', 'kausway-test-client']}
+BINARIES = {'linux': SUITE, 'android': ['kausway-host']}
+EXECUTABLES = SUITE + CLIENT
 ROOT_PACKAGES = {'linux': ['kausway-host', 'kausway-manager', 'kausway-admin'], 'android': ['kausway-host']}
 DOCS = ['docs/architecture/configuration-and-storage.md', 'docs/android/storage.md',
-        'docs/development/ci.md', 'docs/development/versioning.md', 'docs/operations/versions.md',
+        'docs/development/ci.md', 'docs/development/versioning.md', 'docs/development/release-packaging.md', 'docs/operations/versions.md',
         'docs/operations/admin.md', 'docs/operations/manager.md', 'docs/operations/host-administration.md',
         'docs/operations/cli-reference.md', 'docs/operations/development-binaries.md',
         'docs/architecture/transport-policies.md', 'docs/integrations/application-suite.md',
@@ -73,11 +74,12 @@ def check_binary(path, target):
         raise ValueError(f'{path.name}: expected an Android executable interpreter')
 
 
-def notices(metadata, platform, destination):
+def notices(metadata, platform, destination, roots=None):
     packages = {p['id']: p for p in metadata['packages']}
     nodes = {n['id']: n for n in metadata['resolve']['nodes']}
-    pending = [key for key, p in packages.items() if p['name'] in ROOT_PACKAGES[platform]]
-    if len(pending) != len(ROOT_PACKAGES[platform]):
+    roots = ROOT_PACKAGES[platform] if roots is None else roots
+    pending = [key for key, p in packages.items() if p['name'] in roots]
+    if len(pending) != len(roots):
         raise ValueError('metadata does not contain the required binary packages')
     seen = set()
     while pending:
@@ -150,7 +152,7 @@ def archive(tree, output, epoch):
                     info.uid = info.gid = 0
                     info.uname = info.gname = ''
                     info.mtime = epoch
-                    info.mode = 0o755 if path.is_dir() or path.name in BINARIES['linux'] else 0o644
+                    info.mode = 0o755 if path.is_dir() or path.name in EXECUTABLES else 0o644
                     if path.is_file():
                         with path.open('rb') as content:
                             tar.addfile(info, content)
@@ -176,7 +178,7 @@ def main():
     if Path(metadata['workspace_root']).resolve() != ROOT / 'rust':
         parser.error('metadata belongs to another workspace')
     platform, _, _, architecture, runtime = TARGETS[args.target]
-    binaries = BINARIES[platform]
+    binaries = BINARIES[platform] + CLIENT
     for binary in binaries:
         check_binary(args.binary_dir / binary, args.target)
     check_metadata(metadata, ROOT)
@@ -203,11 +205,9 @@ def main():
         for name in ['LICENSE-MIT', 'LICENSE-APACHE']:
             shutil.copyfile(ROOT / name, licenses / name)
         notices(metadata, platform, licenses)
-        groups = [('suite' if platform == 'linux' else 'android-cli', binaries)]
-        groups += [('manager' if name == 'kausway' else name.removeprefix('kausway-'), [name]) for name in binaries]
         sums = []
         dirty = bool(git('status', '--porcelain', '--untracked-files=normal'))
-        for component, included in groups:
+        for track, component, included in groups(args.target):
             component_version = expected_versions[included[0]] if len(included) == 1 else base
             build_id = f'{component_version}-dev.g{args.commit[:12]}'
             name = f'kausway-{component}-{build_id}-{args.target}'
@@ -217,8 +217,9 @@ def main():
                 shutil.copyfile(args.binary_dir / binary, tree / binary)
             files = {p.relative_to(tree).as_posix(): sha256(p) for p in sorted(tree.rglob('*')) if p.is_file()}
             manifest = {'format_version': 1, 'development': True, 'base_version': component_version, 'build_id': build_id,
+                        'release_track': track,
                         'ci': ci_context(args.commit),
-                        'versions': {track: values['version'] for track, values in releases.items() if track != 'schema_version'},
+                        'versions': {track: releases[track]['version']},
                         'binary_versions': {name: expected_versions[name] for name in included},
                         'commit': args.commit, 'source_dirty': dirty, 'target': args.target, 'component': component,
                         'platform': platform, 'architecture': architecture, 'runtime': runtime,

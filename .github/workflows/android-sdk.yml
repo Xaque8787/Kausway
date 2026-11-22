@@ -58,7 +58,9 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           mkdir -p "$RUNNER_TEMP/sdk-development/native" "$RUNNER_TEMP/sdk-development/sample"
-          cp dist/kausway-client-android-"$VERSION".* "$RUNNER_TEMP/sdk-development/"
+          for suffix in .aar .pom -sources.jar -notices.tar.gz -README.md; do
+            cp "dist/kausway-client-android-$VERSION$suffix" "dist/kausway-client-android-$VERSION$suffix.sha256" "$RUNNER_TEMP/sdk-development/"
+          done
           cp -R sdks/android/kausway-client/src/main/jniLibs/. "$RUNNER_TEMP/sdk-development/native/"
           cp examples/android-basic/build/outputs/apk/debug/*.apk "$RUNNER_TEMP/sdk-development/sample/"
           python3 scripts/ci/artifact-manifest.py --directory "$RUNNER_TEMP/sdk-development" \
@@ -88,7 +90,9 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           mkdir -p "$RUNNER_TEMP/sdk-candidate"
-          cp dist/kausway-client-android-"$VERSION".* "$RUNNER_TEMP/sdk-candidate/"
+          for suffix in .aar .pom -sources.jar -notices.tar.gz -README.md; do
+            cp "dist/kausway-client-android-$VERSION$suffix" "dist/kausway-client-android-$VERSION$suffix.sha256" "$RUNNER_TEMP/sdk-candidate/"
+          done
           python3 scripts/ci/artifact-manifest.py --directory "$RUNNER_TEMP/sdk-candidate" \
             --kind android-sdk --target android-arm64-armv7-x86_64 --commit "$GITHUB_SHA"
       - name: Upload validated SDK assets

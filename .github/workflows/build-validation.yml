@@ -219,6 +219,8 @@ jobs:
           layout, output = map(Path, sys.argv[1:])
           folders = list(layout.iterdir())
           assert len(folders) == 1
+          for license in ['LICENSE-MIT', 'LICENSE-APACHE']:
+              shutil.copyfile(Path.cwd() / license, folders[0] / license)
           shutil.make_archive(str(output / folders[0].name), 'zip', layout)
           PYZIP
           cd "$RUNNER_TEMP/plugin-artifact"
@@ -270,7 +272,7 @@ jobs:
   validation_summary:
     name: Validation summary
     if: always()
-    needs: [rust, msrv, plugin, docker, binaries, android_sdk, containers]
+    needs: [rust, msrv, plugin, docker, binaries, android_sdk, containers, release_candidates]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
@@ -294,3 +296,8 @@ jobs:
           path: ${{ runner.temp }}/validation-summary.json
           if-no-files-found: error
           retention-days: 30
+
+  release_candidates:
+    name: Release candidate packaging
+    needs: [binaries, plugin, android_sdk]
+    uses: ./.github/workflows/release-candidates.yml

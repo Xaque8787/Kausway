@@ -53,8 +53,9 @@ kausway-test-client-<development-id>-<target>.tar.gz
 SHA256SUMS
 ```
 
-Android produces `kausway-android-cli-...tar.gz` containing host/client plus their
-two individual component archives. Each archive has a single matching top-level
+Android produces separate host and test-client archives, with no combined bundle.
+The Linux suite contains manager/host/admin; the test-client archive is separate.
+Each archive has a single matching top-level
 folder. Manager's actual executable name is `kausway`; the other executables are
 `kausway-host`, `kausway-admin` and `kausway-test-client`.
 
@@ -72,7 +73,7 @@ Inside each archive:
   licenses/
 ```
 
-The same independently runnable compiled binaries appear in the suite and component
+The same independently runnable suite binaries appear in suite and component
 archives. A manager component still requires the separate host binary and optionally
 admin (sibling executables or explicit binary overrides). Admin can run without a
 manager, with lifecycle controls omitted. Its frontend is embedded; no Node runtime

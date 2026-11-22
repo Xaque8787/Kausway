@@ -46,7 +46,8 @@ def main():
         'version': releases['container']['version'],
         'suite_version': releases['suite']['version'],
         'selected_suite_version': releases['container']['suite_version'],
-        'binary_versions': binary_versions(ROOT), 'revision': args.revision, 'target': args.target,
+        'binary_versions': {name: binary_versions(ROOT)[name] for name in package['BINARIES']['linux']},
+        'revision': args.revision, 'target': args.target,
         'binaries': {name: package['sha256'](bindir / name) for name in package['BINARIES']['linux']},
     }, indent=2) + '\n')
     for path in share.rglob('*'):
