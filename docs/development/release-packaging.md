@@ -26,6 +26,11 @@ Plugin packages include project licenses. SDK sources are deduplicated/determini
 SDK notices cover the project and JNI dependencies for all three ABIs. Direct AAR
 consumers must supply POM dependencies explicitly, as the SDK README explains.
 
+SDK sources use the dedicated `kauswayReleaseSourcesJar` task with unique Java/Kotlin
+source directories. AGP's automatic source collection previously emitted overlapping
+ZIP records. The normalizer rejects overlaps on every Python build; it does not
+suppress ZIP integrity checks. Distinct records are deduplicated only when identical.
+
 ## Candidate assembly
 
 Build Validation calls **Release candidate packages** after binary/plugin/Android

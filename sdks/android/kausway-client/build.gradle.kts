@@ -1,5 +1,16 @@
 plugins { id("com.android.library"); id("org.jetbrains.kotlin.android"); id("maven-publish") }
 group = "io.github.xaque8787"
+// Own the source archive rather than AGP's overlapping Java/Kotlin source collection.
+val sdkSourcesJar = tasks.register<org.gradle.api.tasks.bundling.Zip>("kauswayReleaseSourcesJar") {
+    archiveFileName.set("kausway-client-${project.version}-sources.jar")
+    destinationDirectory.set(layout.buildDirectory.dir("kausway-sdk-sources"))
+    from((android.sourceSets.getByName("main").java.srcDirs + file("src/main/kotlin"))
+        .distinctBy { it.canonicalFile })
+    include("**/*.kt", "**/*.java")
+    duplicatesStrategy = DuplicatesStrategy.FAIL
+    isPreserveFileTimestamps = false
+    isReproducibleFileOrder = true
+}
 android {
     namespace = "io.github.xaque8787.kausway"
     compileSdk = 35
@@ -13,7 +24,7 @@ android {
     buildTypes { release { isMinifyEnabled = false } }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
-    publishing { singleVariant("release") { withSourcesJar() } }
+    publishing { singleVariant("release") }
 }
 dependencies {
     implementation(files("libs/rustls-platform-verifier.jar"))
@@ -22,5 +33,9 @@ dependencies {
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
 }
 afterEvaluate {
-    publishing { publications { create<MavenPublication>("release") { from(components["release"]); artifactId = "kausway-client-android" } } }
+    publishing { publications { create<MavenPublication>("release") {
+        from(components["release"])
+        artifactId = "kausway-client-android"
+        artifact(sdkSourcesJar) { classifier = "sources"; extension = "jar" }
+    } } }
 }

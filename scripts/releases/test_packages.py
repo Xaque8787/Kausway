@@ -264,6 +264,21 @@ class PackageTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             helper.normalize(source, output)
 
+    def test_source_jar_rejects_agp_shared_local_header_records(self):
+        spec = importlib.util.spec_from_file_location('sdk_sources_overlap', ROOT / 'scripts/packaging/package-sdk-sources.py')
+        helper = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(helper)
+        source, output = self.root / 'overlap.jar', self.root / 'must-not-exist.jar'
+        source.write_bytes(jar(['Client.kt']))
+        # Reproduce AGP's two central-directory records referencing one local file.
+        # Private ZIP writer fields are used only to construct this malformed fixture.
+        with zipfile.ZipFile(source, 'a') as archive:
+            archive.filelist.append(copy.copy(archive.infolist()[0]))
+            archive._didModify = True
+        with self.assertRaises(zipfile.BadZipFile):
+            helper.normalize(source, output)
+        self.assertFalse(output.exists())
+
 
 if __name__ == '__main__':
     unittest.main()

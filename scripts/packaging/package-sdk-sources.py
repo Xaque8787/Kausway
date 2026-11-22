@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Normalize AGP's source JAR; deduplicate identical entries, reject conflicts."""
+"""Normalize SDK sources; reject overlaps/conflicts and retain deterministic licenses."""
 import argparse
 from pathlib import Path, PurePosixPath
 import zipfile
@@ -11,17 +11,23 @@ ROOT = Path(__file__).resolve().parents[2]
 def normalize(source, output):
     entries = {}
     with zipfile.ZipFile(source) as archive:
+        offsets = [entry.header_offset for entry in archive.infolist()]
+        if len(offsets) != len(set(offsets)):
+            raise zipfile.BadZipFile('Source entries share a local header (overlapping ZIP records)')
         for entry in archive.infolist():
             path = PurePosixPath(entry.filename)
             if path.is_absolute() or '..' in path.parts or '\\' in entry.filename or entry.file_size > 16 * 1024 * 1024:
                 raise ValueError('Unsafe/oversized source JAR path')
             if entry.is_dir():
                 continue
-            # AGP can emit repeated central-directory records pointing to identical
-            # local data. Validate CRC/content below while suppressing that known warning.
+            # Some Python builds warn where others raise BadZipFile. Treat both
+            # as corruption; never disable the ZIP overlap protection.
             with warnings.catch_warnings():
-                warnings.filterwarnings('ignore', message='Overlapped entries:.*', category=UserWarning)
-                data = archive.read(entry)
+                warnings.filterwarnings('error', message='Overlapped entries:.*', category=UserWarning)
+                try:
+                    data = archive.read(entry)
+                except UserWarning as error:
+                    raise zipfile.BadZipFile('Overlapping source JAR entries') from error
             if entry.filename in entries and entries[entry.filename] != data:
                 raise ValueError('Conflicting duplicate source entries')
             entries[entry.filename] = data
