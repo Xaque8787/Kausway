@@ -1569,7 +1569,7 @@ dependencies = [
 
 [[package]]
 name = "kausway-admin"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "argon2",
  "bytes",
@@ -1591,7 +1591,7 @@ dependencies = [
 
 [[package]]
 name = "kausway-client"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "bytes",
  "futures-util",
@@ -1611,7 +1611,7 @@ dependencies = [
 
 [[package]]
 name = "kausway-client-android"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "jni 0.21.1",
  "jni 0.22.4",
@@ -1625,7 +1625,7 @@ dependencies = [
 
 [[package]]
 name = "kausway-config"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "http",
  "iroh",
@@ -1639,7 +1639,7 @@ dependencies = [
 
 [[package]]
 name = "kausway-host"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "bytes",
  "clap",
@@ -1663,7 +1663,7 @@ dependencies = [
 
 [[package]]
 name = "kausway-manager"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "bytes",
  "clap",
@@ -1680,7 +1680,7 @@ dependencies = [
 
 [[package]]
 name = "kausway-transport"
-version = "0.4.0"
+version = "0.5.0"
 dependencies = [
  "base64 0.22.1",
  "bytes",

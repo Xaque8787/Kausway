@@ -26,6 +26,14 @@ class VersionTests(unittest.TestCase):
             target = self.root / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / relative, target)
+        # Fixed, synchronized fixture baseline: bump tests must still perform a
+        # real change when the repository itself reaches one of their versions.
+        (self.root / 'releases.toml').write_text(
+            'schema_version = 1\n[suite]\nversion = "0.4.0"\n'
+            '[client]\nversion = "0.4.0"\n[container]\n'
+            'version = "0.1.0"\nsuite_version = "0.4.0"\n')
+        for path, text in planned_updates(self.root).items():
+            path.write_text(text)
 
     def snapshot(self):
         return {str(p.relative_to(self.root)): hashlib.sha256(p.read_bytes()).hexdigest()

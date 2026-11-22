@@ -242,7 +242,7 @@ cd sdks/android
 ./gradlew :sample:assembleDebug :kausway-client:assembleDebugAndroidTest
 ```
 
-Outputs: `dist/kausway-client-android-0.4.0.aar`, POM and checksum; native libraries
+Outputs: `dist/kausway-client-android-<client-version>.aar`, POM and checksum; native libraries
 remain in `sdks/android/kausway-client/src/main/jniLibs/<abi>/libkausway_client.so`. ELF
 architecture, JNI export and 16 KiB load alignment are checked before packaging;
 AAR contents are checked afterward. Do not distribute an AAR built before all ABI

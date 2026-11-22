@@ -26,11 +26,12 @@ The workflow must first exist on the default branch for GitHub to expose the
 manual launcher. Do not run the retired Binaries/container publishers from an old
 commit or branch. They are removed from the current workflow model.
 
-The initial manifest values do not represent new releases: suite/client `0.4.0`
-will fail advancement against the existing `v0.4.0` release. Bump them before the
-first new release. The first container release also needs a published **new-layout**
-suite matching `container.suite_version`. Select suite and container together, or
-publish that suite first. Legacy combined archives are not substituted.
+The prepared versions are suite/client `0.5.0` and container `0.1.0`, selecting
+suite `0.5.0`. Existing `v0.4.0` counts as published suite/client history, so its
+version cannot be reused as a new release. Version declarations alone publish
+nothing. The first container release needs a published **new-layout** suite
+matching `container.suite_version`. Select suite and container together, or publish
+that suite first. Legacy combined archives are not substituted.
 
 ## What the launcher pins and verifies
 

@@ -2,9 +2,9 @@
 
 | Component | Version | Where pinned | Why |
 |---|---|---|---|
-| Suite / client release tracks | both currently `0.4.0` | `releases.toml`, synchronized Cargo/SDK metadata | Independent tracks; protocol compatibility is separate. See the [version guide](../development/versioning.md). |
-| Container release track | `0.1.0` (initial declaration) | `releases.toml` | Explicitly selects suite `0.4.0`; publish through the manual main-only launcher after selecting a new-layout suite release. |
-| Kausway Jellyfin plugin release | `0.4.0.0` | synchronized from the suite track into plugin `.csproj` and `meta.json` | Built from local source; Docker checks suite versions and startup replaces persistent older plugin copies. |
+| Suite / client release tracks | both prepared as `0.5.0` | `releases.toml`, synchronized Cargo/SDK metadata | Independent tracks; protocol compatibility is separate. See the [version guide](../development/versioning.md). |
+| Container release track | `0.1.0` (first release prepared) | `releases.toml` | Explicitly selects suite `0.5.0`; publish through the manual main-only launcher after main validation. |
+| Kausway Jellyfin plugin release | `0.5.0.0` | synchronized from the suite track into plugin `.csproj` and `meta.json` | Built from local source; Docker checks suite versions and startup replaces persistent older plugin copies. |
 | Iroh | `=1.4.1` | `rust/Cargo.toml` | Current stable 1.x. The APIs used (`presets::Minimal`, `RelayMode`, `RelayMap`, `SecretKey`, `Connection::paths()`, `TransportAddr::is_relay`) were checked against the 1.4.1 source and docs.rs. The exact pin stops a minor update from silently changing behavior. |
 | Rust toolchain | `1.99.1` | `rust/rust-toolchain.toml`, CI, Dockerfile | Current stable at time of writing. Builds are reproducible with one compiler. |
 | Rust MSRV | `1.91` | `rust-version` in `rust/Cargo.toml`, CI `msrv` job | Iroh 1.4.1 needs edition 2024 and Rust 1.91. The host uses `File::try_lock` (stable since 1.89). |
@@ -16,7 +16,8 @@
 | .NET SDK | `10.0.403` | `integrations/jellyfin/global.json`, Dockerfile (`mcr.microsoft.com/dotnet/sdk:10.0.403@sha256:de4fe90a…dc02b`) | Latest .NET 10 SDK; Jellyfin 12.4 runs on .NET 10. `global.json` allows newer patch releases only. |
 | Plugin test packages | xunit `2.9.3`, xunit.runner.visualstudio `4.0.1`, Microsoft.NET.Test.Sdk `18.11.0` | test `.csproj` | Current stable releases. |
 
-Full digests are in the Dockerfile.
+Full base-image digests are in the Dockerfiles. Prepared product versions are not
+proof of publication; use GitHub Releases and GHCR to confirm distributed assets.
 
 ## Policy
 
@@ -30,15 +31,17 @@ Full digests are in the Dockerfile.
 
 ## Docker verification
 
-The current source produces host `0.4.0` and plugin `0.4.0.0`. The pinned Rust
-Docker stage builds successfully; the plugin publishes with the pinned .NET
-10.0.403 SDK and all 10 plugin tests pass. A runtime audit using those artifacts
-and the Dockerfile's pinned Jellyfin base passed the smoke test: healthy server,
+The earlier combined-image runtime audit used host `0.4.0` and plugin `0.4.0.0`.
+That pinned Rust Docker stage built successfully; the plugin built with .NET
+10.0.403 and all 10 plugin tests passed. With the Dockerfile's pinned Jellyfin base,
+the audit passed the smoke test: healthy server,
 plugin loaded, installed DLL matches the bundle, stale plugin removed, control
 API available, host restart preserves identity, and clean shutdown.
 
-The complete multi-stage build could not be verified in the managed environment:
+During that audit the complete multi-stage build could not be verified locally:
 the .NET registry redirects downloads to `westcentralus.data.mcr.microsoft.com`,
 which its network policy blocks. The runtime audit used the already installed
 matching .NET SDK to publish the plugin, rather than substituting an unpinned
-registry image. No production installation was modified.
+registry image. No production installation was modified. This is a historical
+validation record; current release commits must pass the complete Build Validation
+graph, including combined-image and suite-image tests, before manual publication.

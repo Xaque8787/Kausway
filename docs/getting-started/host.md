@@ -39,7 +39,7 @@ To update an existing installation after pulling repository changes:
 ```sh
 docker compose -f deploy/jellyfin/compose.yaml build --pull
 docker compose -f deploy/jellyfin/compose.yaml up -d --force-recreate
-# Confirm the bundled host version (currently 0.4.0):
+# Confirm the bundled host reports the source checkout's suite version:
 docker compose -f deploy/jellyfin/compose.yaml exec jellyfin kausway-host --version
 ```
 

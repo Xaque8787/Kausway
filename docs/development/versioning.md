@@ -23,9 +23,10 @@ All proposed edits are validated before any files are written.
 | Client | Shared client engine, CLI client, Android JNI adapter and Android SDK |
 | Container | Image packaging; explicitly selects a suite release |
 
-The suite and client remain at `0.4.0` during this infrastructure work. Container
-`0.1.0` is an initial declaration, not an already published release. These versions
-are independent: changing one must not automatically change the others.
+The prepared suite and client versions are `0.5.0`. Container `0.1.0` selects
+suite `0.5.0` for its first release. These declarations do not establish that a
+release has been published; inspect GitHub Releases/GHCR for availability.
+The tracks remain independent: changing one must not automatically change the others.
 
 The container's `suite_version` is an explicit dependency selection. It can refer
 to an older published suite; the sync command does not silently advance it when
