@@ -1,8 +1,8 @@
-# Local admin account setup (Phase 3)
+# Local admin account setup
 
 `kausway-admin` contains an embedded web frontend and local authentication server.
-This phase provides first-run setup, sign-in/out, and administrator credential
-changes. Phase 4 adds [host administration](host-administration.md), including
+It provides first-run setup, sign-in/out, administrator credential changes and
+[host administration](host-administration.md), including
 settings, invitations, devices, sessions and manager-backed lifecycle controls.
 No Node runtime or separate frontend server is needed.
 
@@ -21,6 +21,9 @@ kausway-admin --config /app/config/config.toml --data-dir /app/data/admin
 # Or launch through the manager (sibling binaries by default).
 kausway run --config /app/config/config.toml --data-root /app/data --admin-ui
 ```
+
+Build outputs are in `rust/target/debug/` unless `CARGO_TARGET_DIR` is set. The
+commands assume the executables are on PATH; otherwise use their full paths.
 
 Admin defaults to `127.0.0.1:47951`. Paths follow the shared
 [platform rules](../architecture/configuration-and-storage.md). Its `--data-dir`
@@ -121,9 +124,11 @@ docker exec my-container sh -c 'kausway-admin credentials reset \
   --username alice --password-stdin < /run/secrets/kausway_admin_password'
 ```
 
-This documents the executable interface; the official Docker suite is a later
-phase. Config/data paths must match those supplied to the running component and
-be mounted persistently by the container deployment.
+Those paths are examples for an application-owned layout. The official Docker
+suite selects `/config/config.toml` and `/data/admin`; see
+[Docker setup, terminal commands and persistence](../integrations/docker-suite.md).
+Config/data paths must match those supplied to the running component and be
+mounted persistently by the container deployment.
 
 ## Storage and sessions
 
@@ -177,7 +182,8 @@ Each connection carries one bounded newline-delimited JSON request, including th
 canonical selected config path. Supported operations are `setup-link`,
 `credentials.set`, and `credentials.reset`; the latter two include username and
 password. Replies contain `ok` and `result`, or a generic error. Secrets are not
-logged. Configuration mismatch is rejected. Phase 5 adds `status` and `entry-link` for application handoff and manager forwarding.
+logged. Configuration mismatch is rejected. `status` and `entry-link` support
+application handoff and manager forwarding.
 See [application integration](../integrations/application-suite.md) for the implemented
 private protocol and reference helper; no separately published SDK is required.
 

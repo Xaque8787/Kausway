@@ -1,9 +1,9 @@
-# Docker suite and application integration (Phase 7)
+# Docker suite and application integration
 
 The suite image contains `kausway` (manager), `kausway-host` and `kausway-admin`.
-The CLI client is a separate client-track download. Its default command starts the manager
-with admin enabled. The manager owns its children; it does not adopt a host
-which another process already started.
+The CLI client is a separate client-track download. The image's default command
+starts the manager with admin enabled. The manager owns its children; it does not
+adopt a host which another process already started.
 
 Development images are produced by **Build Validation** on any branch or PR and
 are downloadable Actions artifacts, not GHCR publications. The parent calls the
@@ -76,8 +76,10 @@ docker logs kausway
 
 No command, origin or credentials must be supplied. Open the expiring setup link
 from the logs, create an account, configure the origin in admin, save, and Start
-host. A fresh suite starts with the host disabled. Do not set a permanent
-`KAUSWAY_HOST_ENABLED=false` override if users should subsequently start it.
+host. A fresh suite starts with the host disabled. Leave `KAUSWAY_HOST_ENABLED`
+unset when the saved desired state should survive container recreation. That
+variable selects initial state at each launch; Start/Stop can still change state
+during the current run.
 
 `deploy/standalone/compose.yaml` supplies the same defaults and named volumes:
 
@@ -122,7 +124,7 @@ environment:
 
 | Container path | Contents |
 | --- | --- |
-| `/config/kausway.toml` | Shared saved settings and administrator password hash |
+| `/config/config.toml` | Shared saved settings and administrator password hash |
 | `/data/host/` | Host identity, pairings and host state |
 | `/data/admin/` | Admin component state and local IPC |
 | `/data/manager/` | Manager component state and local IPC |
@@ -148,10 +150,33 @@ The image supports a read-only root with writable config/data mounts and a `/tmp
 tmpfs. An arbitrary `--user` is possible if the caller provisions writable mounts;
 it does not automatically chown existing data. No root-only startup chown runs.
 
-Image environment selects `/config/kausway.toml`, `/data`, and the container admin
+Image environment selects `/config/config.toml`, `/data`, and the container admin
 listener; these launch overrides take precedence over saved settings. Other saved
 settings remain editable. To change those overridden values, change the container
 environment and recreate it. See [configuration precedence](../architecture/configuration-and-storage.md).
+
+Earlier development images selected `/config/kausway.toml`. When reusing a test
+volume containing that file, deliberately select it with
+`KAUSWAY_CONFIG=/config/kausway.toml`, or stop the suite and rename it to
+`config.toml` if no different `config.toml` needs preserving. Files are not renamed
+or merged automatically. Inspect the selected file with `docker exec kausway
+kausway status` before changing anything. The host identity/pairings live under
+`/data/host`, so reusing just the config mount does not restore those records.
+
+To reuse a stopped standalone Linux installation as bind mounts, for example:
+
+```yaml
+user: "1000:1000"  # Replace with the actual owner's UID:GID.
+volumes:
+  - /home/your-user/.config/kausway:/config
+  - /home/your-user/.local/share/kausway:/data
+```
+
+Use that installation's actual paths, including XDG overrides. Confirm the selected
+config filename and that its component directories are directly beneath the data
+mount. Both mounts must be writable by the chosen UID. Do not run the standalone
+suite concurrently against the same files. Origin addresses may need changing:
+container localhost and Docker service names resolve in the container's network.
 
 ## Copy into an application's image
 
@@ -196,6 +221,12 @@ docker run --init --stop-timeout 45 \
   -v application-config:/config -v application-data:/data my-application
 ```
 
+For an unpublished development image, first load the matching Actions image
+archive, then build this example with `--build-arg KAUSWAY_IMAGE=kausway-suite:test`.
+Use the same local Docker engine and native target. A remote Buildx worker cannot
+see an image that exists only in another engine's local store. No GHCR development
+publication is required; [CI instructions](../development/ci.md) cover artifact loading.
+
 | Environment | Processes |
 | --- | --- |
 | `KAUSWAY_MODE=manager`, `KAUSWAY_WITH_ADMIN=true` (defaults) | Application + manager; manager owns host and admin |
@@ -229,7 +260,9 @@ docker run --init --stop-timeout 45 \
 ```
 
 To run the manager without admin, replace the default command with
-`kausway run --admin-ui=false`. Standalone admin uses
+`kausway run --admin-ui=false`. Add `--host-enabled` when it should immediately
+launch the host; otherwise use `kausway start` or the saved desired state.
+Standalone admin uses
 `kausway-admin --data-dir /data/admin --host-data-dir /data/host`; it needs the
 same local host namespace/storage for host administration. The image's
 `KAUSWAY_DATA_ROOT` is manager-specific, so standalone components use explicit
@@ -247,7 +280,7 @@ from kausway import SuiteManager
 
 suite = SuiteManager(
     Path('/usr/local/bin/kausway'),
-    config=Path('/config/kausway.toml'), data_root=Path('/data'),
+    config=Path('/config/config.toml'), data_root=Path('/data'),
     host_enabled=None, admin=True, restart_policy='host',
 )
 suite.wait_ready()  # Manager and admin; require_host=True when host is required.
@@ -305,9 +338,11 @@ restart the container. Use `kausway stop` to stop only its host while retaining 
 ## Validation
 
 `python3 scripts/ci/container-suite-smoke.py <local-image>` tests the suite image,
-then copies its binaries into Alpine and Ubuntu consumers. It checks first-run
+then copies its binaries into Alpine and Ubuntu consumers. It checks the default
+config filename and an explicit filename override, first-run
 link issuance, credential persistence/login, host identity persistence, manager
-start/stop, non-root/read-only operation, signal shutdown, all four entrypoint
-modes and application exit status. Development CI runs it natively for each CPU
+start/stop, persistence across container recreation, non-root/read-only operation,
+signal shutdown, all four entrypoint modes and application exit status.
+Development CI runs it natively for each CPU
 before exporting test image artifacts. A process-ready result is not an origin
 health check, and a successful image build alone is not a runtime test.

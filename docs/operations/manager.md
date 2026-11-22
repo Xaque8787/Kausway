@@ -1,8 +1,8 @@
-# Local suite manager (Phase 2)
+# Local suite manager
 
 `kausway` is an optional foreground supervisor. It starts the existing
 `kausway-host` executable as a child; the standalone host remains supported.
-Linux is the validated platform for this phase. Unix IPC/signals are implemented;
+Linux is the validated release platform. Unix IPC/signals are implemented;
 Windows currently returns an explicit unsupported-platform error. No Windows or
 macOS release support is claimed by these Linux checks.
 
@@ -11,10 +11,12 @@ macOS release support is claimed by these Linux checks.
 From the repository root:
 
 ```sh
-cargo build --manifest-path rust/Cargo.toml -p kausway-manager -p kausway-host --bins --locked
+cargo build --manifest-path rust/Cargo.toml -p kausway-manager -p kausway-host -p kausway-admin --bins --locked
 ```
 
 The binaries are in `rust/target/debug/` unless `CARGO_TARGET_DIR` overrides it.
+The commands below assume that directory is on PATH; otherwise use each
+executable's full path. Downloaded suite archives can be run with `./kausway`.
 The manager finds siblings beside its own executable, not through the working
 directory or PATH. `--host-binary PATH` / `KAUSWAY_HOST_BINARY` and
 `--admin-binary PATH` / `KAUSWAY_ADMIN_BINARY` select explicit executables.
@@ -148,7 +150,9 @@ One newline-delimited JSON request per connection:
 {"operation":"status"}
 ```
 
-Operations: `status`, `host.start`, `host.stop`, `host.restart`, `shutdown`.
+Lifecycle operations: `status`, `host.start`, `host.stop`, `host.restart`, `shutdown`.
+Admin handoff/provisioning operations are documented in
+[application integration](../integrations/application-suite.md#private-manager-protocol-v1).
 Replies contain `ok` and `status`; failures also contain `error`. The status
 includes protocol version 1, desired state, observed host/admin state, tracked
 PIDs, failure count, retry delay, and recent lifecycle diagnostics.
@@ -170,18 +174,19 @@ Other raw child output remains omitted. See [admin setup](admin.md).
 
 `--admin-ui[=true|false]` / `KAUSWAY_ADMIN_ENABLED` overrides `admin.enabled` at
 manager startup. Admin is disabled by default. If enabled, the executable must
-exist; Phase 3 now provides the admin authentication server.
+exist. It supplies account setup and authenticated host administration.
 
-The agreed child invocation is:
+The child receives the shared config and explicit component/manager paths:
 
 ```text
-kausway-admin --config <shared-file> --data-dir <root>/admin --manager-socket <socket>
+kausway-admin --config <shared-file> --data-dir <root>/admin \
+  --host-data-dir <root>/host --manager-socket <socket>
 ```
 
 Admin remains running when the host is stopped. Manager exit reaps it. An admin
-exit is reported as failed without stopping host supervision. At this phase,
-admin status reports process existence only; web readiness is not inferred from process existence. Phase 3 supplies
-authentication; an exited admin is reported as failed without automatic recovery.
+exit is reported as failed without stopping host supervision or automatically
+restarting admin. Manager status tracks process existence; web readiness is checked
+separately through `admin.status` or the integration helper's readiness polling.
 
 ## Validation
 
@@ -196,7 +201,7 @@ shutdown, duplicate-manager protection, external-host refusal, diagnostics
 redaction, and admin survival while host is stopped. The smoke test exercises the
 actual host, including identity preservation and refusal to stop an external host.
 
-## Phase 4 integration
+## Host administration
 
 See [host administration](host-administration.md) for the UI, configuration API,
 application-restart policy and ownership checks. Manager status now includes its
@@ -208,7 +213,7 @@ The manager preserves the control listener's CLI/environment/file/default source
 in the child. An internal managed-host guard enforces loopback-only binding rather
 than turning saved listener settings into artificial CLI overrides.
 
-## Application integration (Phase 5)
+## Application integration
 
 `--integration-stdio` provides a private framed stdin/stdout protocol, readiness
 handshake, admin setup/login links, credential provisioning and parent-disconnect

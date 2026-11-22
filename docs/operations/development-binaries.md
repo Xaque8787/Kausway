@@ -1,4 +1,4 @@
-# Development binary distributions (Phase 6)
+# Development binary distributions
 
 **Build Validation** runs on every branch push and pull request, calling
 **Development binaries** to produce checksummed `.tar.gz` archives. Its stable
@@ -6,7 +6,7 @@
 workflows can be manually dispatched once available on the default branch.
 See [CI and development artifacts](../development/ci.md) for the exact graph.
 
-Suite/client versions come from `releases.toml` and are currently both `0.4.0`.
+Suite/client versions come from `releases.toml`.
 Archive names include the component's version plus `-dev.g<12-character-commit>`;
 BUILD-INFO records the full source and run identity. `--version` reports each
 binary's suite/client track, not the development suffix. Published assets are
@@ -132,8 +132,8 @@ Extracting an archive never changes those defaults. On Android, see
 For independently supervised components:
 
 ```sh
-./kausway-host serve --config /app/config/kausway.toml --data-dir /app/data/host
-./kausway-admin --config /app/config/kausway.toml --data-dir /app/data/admin --host-data-dir /app/data/host
+./kausway-host serve --config /app/config/config.toml --data-dir /app/data/host
+./kausway-admin --config /app/config/config.toml --data-dir /app/data/admin --host-data-dir /app/data/host
 ```
 
 The examples above run in separate terminals. See [admin setup/recovery](admin.md),

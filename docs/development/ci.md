@@ -1,4 +1,4 @@
-# Branch-independent CI and development artifacts (Phase 8.2)
+# Branch-independent CI and development artifacts
 
 Push to any branch or open/update a pull request. **Build Validation** runs the
 required tests and development builds, including on main. A branch need not be

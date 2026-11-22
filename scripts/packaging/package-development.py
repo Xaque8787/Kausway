@@ -36,8 +36,11 @@ TARGETS = {
 BINARIES = {'linux': SUITE, 'android': ['kausway-host']}
 EXECUTABLES = SUITE + CLIENT
 ROOT_PACKAGES = {'linux': ['kausway-host', 'kausway-manager', 'kausway-admin'], 'android': ['kausway-host']}
-DOCS = ['docs/architecture/configuration-and-storage.md', 'docs/android/storage.md',
-        'docs/development/ci.md', 'docs/development/versioning.md', 'docs/development/release-packaging.md', 'docs/operations/versions.md',
+DOCS = ['docs/architecture/configuration-and-storage.md', 'docs/android/storage.md', 'docs/android/README.md',
+        'docs/history/android-implementation-plan.md', 'docs/history/android-validation.md',
+        'docs/getting-started/suite.md',
+        'docs/development/ci.md', 'docs/development/versioning.md', 'docs/development/release-packaging.md',
+        'docs/development/publishing.md', 'docs/operations/versions.md',
         'docs/operations/admin.md', 'docs/operations/manager.md', 'docs/operations/host-administration.md',
         'docs/operations/cli-reference.md', 'docs/operations/development-binaries.md',
         'docs/architecture/transport-policies.md', 'docs/integrations/application-suite.md',

@@ -199,8 +199,10 @@ so a still-running development build does not masquerade as released software.
 
 These checks are release-guide conventions, not an enforced approval or form in
 the publisher. CI covers its automated tests; green CI does not claim real-phone
-and real-network acceptance testing occurred. The remaining Phase 8 documentation
-audit and post-publication link audit should point users to items that actually exist.
+and real-network acceptance testing occurred. After publication, audit install and
+integration examples against the actual release assets/image tags. Update example
+versions and links deliberately; retain development-artifact instructions for
+unreleased work and historical records with their original context.
 
 ## Local verification of the publisher
 

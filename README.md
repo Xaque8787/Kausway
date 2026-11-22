@@ -7,9 +7,11 @@ through the Android SDK or development CLI. Jellyfin is the reference server int
 
 ## Start here
 
-- [Development binary downloads](docs/operations/development-binaries.md): branch-independent suite/component archives, targets, checksums and first launch.
+- [Install and run the suite](docs/getting-started/suite.md): select a download, start manager/admin, configure a server and pair a client.
+- [Development binary downloads](docs/operations/development-binaries.md): branch-independent suite/component archives, targets and checksums.
 - [CI and development artifacts](docs/development/ci.md): required validation summary, SDK/plugin/image downloads and local container builds.
 - [Release packaging](docs/development/release-packaging.md): separate track inventories, prerelease rules and selected-suite container staging.
+- [Manual release guide](docs/development/publishing.md): prepare versions, validate main, select release tracks, retry and roll back.
 
 - [Quick start: local testing](docs/getting-started/local-testing.md): download the CLIs, start a host, pair a client and access any HTTP origin.
 - [Complete CLI reference](docs/operations/cli-reference.md): every command, argument and environment variable.
@@ -32,12 +34,16 @@ through the Android SDK or development CLI. Jellyfin is the reference server int
 | `deploy/standalone/` | Multi-architecture manager/host/admin suite image and sidecar Compose |
 | `scripts/android/` | Native/AAR builds, artifact inspection and emulator fixtures |
 | `scripts/ci/` | Version checks and end-to-end/smoke validation |
-| `scripts/packaging/` | CLI archive and Jellyfin plugin packaging |
+| `scripts/packaging/` | Binary/SDK/plugin packaging and verified image staging |
+| `scripts/releases/` | Independent release versions, candidate inventories and manual publication |
 | `protocol/` | Transport and control API contracts |
 | `docs/` | Current guides, architecture, operations and historical records |
 | `.github/workflows/` | Parent Build Validation, reusable development builds and manual main-only publication |
 
 ## Build and validate
+
+See [Contributing](CONTRIBUTING.md) for the branch-to-release workflow and adding
+components/SDKs. Version synchronization and publication are explicit operations.
 
 From the repository root:
 

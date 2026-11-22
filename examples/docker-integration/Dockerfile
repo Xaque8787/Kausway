@@ -11,7 +11,7 @@ COPY --from=kausway /usr/share/kausway/ /usr/share/kausway/
 COPY entrypoint.sh supervise.py /opt/kausway-example/
 RUN chmod 0755 /opt/kausway-example /opt/kausway-example/entrypoint.sh \
     && chmod 0644 /opt/kausway-example/supervise.py
-ENV KAUSWAY_CONFIG=/config/kausway.toml KAUSWAY_DATA_ROOT=/data \
+ENV KAUSWAY_CONFIG=/config/config.toml KAUSWAY_DATA_ROOT=/data \
     KAUSWAY_ADMIN_LISTEN=0.0.0.0:47951 KAUSWAY_MODE=manager KAUSWAY_WITH_ADMIN=true
 USER 10001:10001
 ENTRYPOINT ["/opt/kausway-example/entrypoint.sh"]

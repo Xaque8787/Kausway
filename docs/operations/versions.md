@@ -3,7 +3,7 @@
 | Component | Version | Where pinned | Why |
 |---|---|---|---|
 | Suite / client release tracks | both currently `0.4.0` | `releases.toml`, synchronized Cargo/SDK metadata | Independent tracks; protocol compatibility is separate. See the [version guide](../development/versioning.md). |
-| Container release track | `0.1.0` (initial declaration) | `releases.toml` | Selects suite `0.4.0`; publication redesign is not yet complete. |
+| Container release track | `0.1.0` (initial declaration) | `releases.toml` | Explicitly selects suite `0.4.0`; publish through the manual main-only launcher after selecting a new-layout suite release. |
 | Kausway Jellyfin plugin release | `0.4.0.0` | synchronized from the suite track into plugin `.csproj` and `meta.json` | Built from local source; Docker checks suite versions and startup replaces persistent older plugin copies. |
 | Iroh | `=1.4.1` | `rust/Cargo.toml` | Current stable 1.x. The APIs used (`presets::Minimal`, `RelayMode`, `RelayMap`, `SecretKey`, `Connection::paths()`, `TransportAddr::is_relay`) were checked against the 1.4.1 source and docs.rs. The exact pin stops a minor update from silently changing behavior. |
 | Rust toolchain | `1.99.1` | `rust/rust-toolchain.toml`, CI, Dockerfile | Current stable at time of writing. Builds are reproducible with one compiler. |

@@ -9,6 +9,7 @@ services:
     volumes:
       - kausway-config:/config
       - kausway-data:/data
+    # Image defaults: KAUSWAY_CONFIG=/config/config.toml, KAUSWAY_DATA_ROOT=/data.
     # No command or host origin override: complete first-run setup in admin.
     # Set origin to http://<application-service-name>:<port> on a shared network.
 

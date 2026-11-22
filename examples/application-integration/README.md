@@ -22,4 +22,6 @@ Windows manager support/native macOS validation remain deferred.
 
 Never log request/reply frames, setup URLs or credentials. For a server/container,
 use the helper without opening a browser and expose the entry only through an
-appropriate private local application action. No Docker packaging is added here.
+appropriate private local application action. See the
+[Docker integration guide](../../docs/integrations/docker-suite.md) for sidecars,
+embedding these binaries and choosing entrypoint or application supervision.

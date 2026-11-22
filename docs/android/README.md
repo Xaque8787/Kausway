@@ -1,4 +1,4 @@
-# Kausway Android SDK 0.4.0
+# Kausway Android SDK
 
 Transport for existing Android HTTP clients and players. The SDK pairs with the
 unchanged protocol-v1 host and exposes its HTTP origin through an embedded loopback
@@ -9,27 +9,30 @@ and app-private directory selection.
 
 ## Artifact and requirements
 
-- Artifact: `kausway-client-android-0.4.0.aar`; namespace `io.github.xaque8787.kausway`.
+- Artifact: `kausway-client-android-<client-version>.aar`; namespace `io.github.xaque8787.kausway`.
 - Kotlin 2.1.20+ consumer toolchain; compiled JVM target 17.
 - Minimum Android API 24, arm64-v8a, armeabi-v7a and x86_64. No 32-bit x86 build:
   modern emulators use x86_64, and real 32-bit ARM devices use armeabi-v7a.
-- SDK, host/CLI and plugin releases now share the project version. SDK 0.4.0
-  still speaks protocol v1 and remains compatible with host 0.3.0. The invitation
-  and authorization formats are unchanged.
+- SDK, shared client engine and CLI share the client release version. Suite
+  (host/manager/admin/plugin) and container versions are independent. Wire-protocol
+  compatibility is separate from those release numbers; this SDK speaks protocol v1.
 - Kotlin suspend APIs use coroutines; all JNI/network work runs on Dispatchers.IO.
   A bare AAR does not carry Maven transitive dependency metadata. Add the coroutine
   runtime below. Kotlin's normal Android plugin supplies the Kotlin standard library.
   No Rust installation, JNA, native pointer handling or separate .so download is needed.
 
-After the first Kausway release is published, download `kausway-client-android-0.4.0.aar` from the project's
-[GitHub Releases](https://github.com/Xaque8787/Kausway/releases). Verify its
-accompanying SHA-256 checksum and place the AAR in `app/libs`. Development builds
-are also available in the **Android SDK** workflow's versioned artifact:
+Download the versioned AAR from a `client-v<version>` release on
+[GitHub Releases](https://github.com/Xaque8787/Kausway/releases). Earlier `v0.4.0`
+keeps its original SDK assets. Verify the accompanying SHA-256 checksum and place
+the AAR in `app/libs`. Replace `<client-version>` in the filenames below with
+the actual downloaded client version. Development builds are available through
+[Build Validation](../development/ci.md); choose the SDK candidate artifact from a
+successful full run, rather than treating an early diagnostic artifact as validated:
 
 ```kotlin
 plugins { id("org.jetbrains.kotlin.android") }
 dependencies {
-    implementation(files("libs/kausway-client-android-0.4.0.aar"))
+    implementation(files("libs/kausway-client-android-<client-version>.aar"))
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
 }
 ```

@@ -18,7 +18,7 @@ RUN addgroup -g 10001 kausway && adduser -D -u 10001 -G kausway kausway \
     && mkdir /config /data && chown 10001:10001 /config /data
 COPY bin/ /usr/local/bin/
 COPY share/ /usr/share/
-ENV KAUSWAY_CONFIG=/config/kausway.toml KAUSWAY_DATA_ROOT=/data \
+ENV KAUSWAY_CONFIG=/config/config.toml KAUSWAY_DATA_ROOT=/data \
     KAUSWAY_ADMIN_LISTEN=0.0.0.0:47951
 USER 10001:10001
 EXPOSE 47951/tcp

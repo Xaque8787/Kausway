@@ -75,8 +75,56 @@ Pass these arguments through the application's existing supported native-process
 launcher. This is directory selection, not a claim that arbitrary downloaded
 executables can be launched from app storage on every Android version.
 The host creates the required directories and files; no HOME is required when
-both paths are explicit. A future manager integration can use the same config
-and `--data-root <root>/data`.
+both paths are explicit. Android builds supply host/client only; manager/admin
+are Linux suite components and are not Android integration targets.
+
+## Termux client test
+
+Download the Android **test-client** archive matching the phone's supported
+userland ABI, plus its `.sha256`, from a client release or a successful
+[Build Validation artifact](../development/ci.md). Do not use a Linux musl archive
+or the SDK AAR for these terminal commands. If downloaded through the phone's
+browser, grant Termux shared-storage access once with `termux-setup-storage`.
+
+Copy both downloads into Termux-private storage before extracting/running:
+
+```sh
+pkg install coreutils tar
+mkdir -p "$HOME/kausway-cli"
+cd "$HOME/kausway-cli"
+# Replace these placeholders with the complete downloaded version and target.
+CLIENT_VERSION='<downloaded-client-version>'
+TARGET=aarch64-linux-android  # Use armv7-linux-androideabi for 32-bit ARM.
+ARCHIVE="kausway-test-client-$CLIENT_VERSION-$TARGET"
+cp "$HOME/storage/downloads/$ARCHIVE.tar.gz" "$HOME/storage/downloads/$ARCHIVE.tar.gz.sha256" .
+sha256sum -c "$ARCHIVE.tar.gz.sha256"
+tar -xzf "$ARCHIVE.tar.gz"
+cd "$ARCHIVE"
+./kausway-test-client --version
+```
+
+For development downloads, extract the outer Actions ZIP first and use the full
+`-dev.g<commit>` version in its contained filename. Android shared storage is for
+transferring downloads; run executables and keep identities in Termux-private HOME.
+
+To pair with a new test host without disturbing an existing client, choose a
+previously unused data directory. Create a fresh invitation in the running host's
+admin UI and paste its **complete** `kausway://invite/...` link below:
+
+```sh
+CLIENT_DATA="$HOME/.local/share/kausway/client-new-host"
+./kausway-test-client --data-dir "$CLIENT_DATA" pair '<complete-invitation-link>'
+./kausway-test-client --data-dir "$CLIENT_DATA" proxy --listen 127.0.0.1:8097
+```
+
+Keep the proxy running and open `http://127.0.0.1:8097` in the phone's browser.
+Sign into the media server with its own account. Use the same `CLIENT_DATA` on
+subsequent starts to retain pairing. Another clean test should use another unused
+directory; deleting the earlier directory is unnecessary. Invitations expire and
+are single use, so request another after a successful redemption. Older clients
+expecting the former invitation scheme should be replaced with a current client.
+
+## Client SDK storage
 
 The existing client SDK already defaults to:
 

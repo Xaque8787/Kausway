@@ -16,4 +16,8 @@ separate from the origin application's user authentication.
 - [Jellyfin reference plugin](../../integrations/jellyfin/plugin/)
 - [Combined Jellyfin deployment](../../deploy/jellyfin/compose.yaml)
 
-A standalone sidecar image is future work; it will live in `deploy/standalone/`.
+The [Docker suite](docker-suite.md) supplies a manager/admin/host sidecar, while
+[application integration](application-suite.md) covers supervising the suite or
+independent host/admin binaries. Admin can provide settings and pairing UI without
+the developer implementing another settings page. Its lifecycle controls require
+the matching owning manager and host restart policy.

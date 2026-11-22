@@ -19,7 +19,7 @@ def main():
     admin = os.environ.get('KAUSWAY_WITH_ADMIN', 'true')
     if mode not in ['manager', 'host'] or admin not in ['true', 'false']:
         raise SystemExit('KAUSWAY_MODE must be manager/host; KAUSWAY_WITH_ADMIN must be true/false')
-    config = os.environ.get('KAUSWAY_CONFIG', '/config/kausway.toml')
+    config = os.environ.get('KAUSWAY_CONFIG', '/config/config.toml')
     data = Path(os.environ.get('KAUSWAY_DATA_ROOT', '/data'))
     if mode == 'manager':
         commands = [['kausway', 'run', '--config', config, '--data-root', str(data), '--admin-ui=' + admin]]

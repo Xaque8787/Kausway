@@ -1,4 +1,4 @@
-# Host administration (Phase 4)
+# Host administration
 
 The authenticated admin UI now provides Overview, Invitations, Devices, Sessions,
 Settings, Diagnostics and Account screens. Existing standalone host/client commands

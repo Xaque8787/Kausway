@@ -1,22 +1,18 @@
 # Run the Kausway host
 
-For a short walkthrough, start with [Quick start: local testing](local-testing.md).
+For manager/admin setup, start with [Install and run the suite](suite.md).
+For a host/CLI walkthrough, see [Quick start: local testing](local-testing.md).
 See the [complete CLI reference](../operations/cli-reference.md) for all arguments.
 
 Private remote access to a home media server over [Iroh](https://www.iroh.computer/) peer-to-peer connections, without port forwarding or a hosted backend.
 
 The core is a standalone Rust host, `kausway-host`. It knows nothing about Jellyfin. It forwards HTTP requests from paired devices to one configurable local origin. Jellyfin is the first integration, through an admin plugin. Another media server could bundle the same executable.
 
-See [Kausway naming and validation](../history/migration/kausway-naming.md) for the clean-break identities and current verification status.
-
-## Status
-
-| Milestone | Scope | State |
-|---|---|---|
-| 1. Foundation | Transport protocol v1 messages and framing, policies, pairing primitives, HTTP forwarding primitives, host identity and state storage, `identity` and `doctor` commands, build validation CI | Compiled and tested by CI |
-| 2. Rust host | Iroh endpoint, pairing over invite links, sessions, HTTP-over-Iroh streaming with Range and cancellation, revocation, policy gate, test client, end-to-end CI test | Compiled and tested by CI |
-| 3. Control API, plugin, Docker | Control API v1 (`protocol/control-v1.md`), live session diagnostics, Jellyfin admin plugin, Docker image with process supervision and automatic plugin install, Compose, CI for plugin and image | Passed baseline Kausway CI; renamed build validation pending |
-| Later | Cross-platform workflow, diagnostics, docs, Android TV fork spec | Not started |
+Linux suite binaries, Android host/CLI downloads and the Android client SDK are
+built by [Build Validation](../development/ci.md). The optional manager/admin can
+be embedded or deployed as a [Docker sidecar](../integrations/docker-suite.md).
+Windows/macOS native release workflows and Android manager/admin are not supplied.
+Earlier naming and validation records are retained under `docs/history/`.
 
 ## Running with Docker (Jellyfin + kausway-host)
 
@@ -114,7 +110,7 @@ With the host running, in a second terminal:
 ```bash
 ./target/release/kausway-host invite --data-dir ./kausway-data --label "Laptop"   # prints a kausway://invite/... link
 ./target/release/kausway-host devices --data-dir ./kausway-data
-./target/release/kausway-host revoke --data-dir ./kausway-data <endpoint id>
+./target/release/kausway-host revoke --data-dir ./kausway-data '<endpoint-id>'
 ```
 
 On the device (any machine, using its own data directory):
@@ -123,7 +119,7 @@ On the device (any machine, using its own data directory):
 ./target/release/kausway-test-client pair 'kausway://invite/...'
 ./target/release/kausway-test-client status                       # policy, path (direct/relay), RTT
 ./target/release/kausway-test-client fetch /System/Info/Public
-./target/release/kausway-test-client fetch /Videos/<id>/stream?static=true --range bytes=0-1048575 -o part.bin
+./target/release/kausway-test-client fetch '/Videos/<id>/stream?static=true' --range bytes=0-1048575 -o part.bin
 ./target/release/kausway-test-client proxy --listen 127.0.0.1:8097  # open http://127.0.0.1:8097 in a browser
 ```
 
@@ -135,25 +131,29 @@ Configuration (flags or environment):
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `KAUSWAY_DATA_DIR` | `./kausway-data` | Identity, device registry, lock file |
+| `KAUSWAY_CONFIG` | Platform config file | Shared saved settings; does not relocate host state |
+| `KAUSWAY_DATA_DIR` | Platform data root + `host/` | Identity, device registry, lock file; explicit examples above choose `./kausway-data` |
 | `KAUSWAY_ORIGIN` | `http://127.0.0.1:8096` | Local HTTP service to expose |
 | `KAUSWAY_TRANSPORT_POLICY` | stored value, else `auto` | `auto`, `relay_only`, `p2p_only` |
 | `KAUSWAY_RELAY_URL` | Iroh default relays | Custom relay URL, or `none` to disable relays (LAN or testing only) |
 | `KAUSWAY_WEBSOCKETS` | stored value, else `on` | `on` forwards WebSocket connections; `off` refuses them (the pre-WebSocket behavior) |
 | `KAUSWAY_WEBSOCKET_ORIGIN` | stored value, else `rewrite` | `rewrite` sends the origin's own address as the WebSocket `Origin` header; `pass_through` forwards the client's value |
 | `RUST_LOG` | `info,iroh=warn,noq=warn,kausway_host=info,kausway_transport=info` | Log filter for `serve` |
-| `KAUSWAY_CLIENT_DATA_DIR` | `./kausway-client-data` | Test client identity and paired host |
+| `KAUSWAY_CLIENT_DATA_DIR` | `./kausway-client-data` on non-Android; Android platform root + `client/` | Test client identity and paired host |
 | `KAUSWAY_CONTROL_LISTEN` | `127.0.0.1:47950` | Control API address, or `off` |
 | `KAUSWAY_CONTROL_ALLOW_REMOTE` | unset | Required to listen on a non-loopback address |
 | `KAUSWAY_CONTROL_TOKEN` | generated `control.token` | Fixed control token (32+ characters) instead of the file |
 
 The plugin reads `JELLYFIN_KAUSWAY_CONTROL_URL`, `JELLYFIN_KAUSWAY_CONTROL_TOKEN_FILE` and `JELLYFIN_KAUSWAY_CONTROL_TOKEN`; these override the plugin's saved settings. The Docker image sets the first two.
 
+CLI flags take precedence over environment, saved shared settings and defaults.
+See [platform storage and precedence](../architecture/configuration-and-storage.md).
+
 ## Security notes
 
 - The data directory holds the host's private key (`identity.key`). It is created with owner-only permissions on Unix. Back it up: if it is lost, every device must pair again.
 - Invitation tokens are stored only as SHA-256 digests. They are single use and expire. Failed attempts are rate limited, and the limit is saved across restarts.
-- `relay_only` and `p2p_only` are **best-effort**, not guaranteed. See `docs/architecture/transport-policies.md`.
+- `relay_only` and `p2p_only` are **best-effort**, not guaranteed. See [transport policies](../architecture/transport-policies.md).
 - The control API token grants full control of pairing. It lives in `control.token` (owner-only) and never reaches the browser: the dashboard page calls the plugin, which requires a Jellyfin administrator and forwards a fixed set of operations.
 
 ## License

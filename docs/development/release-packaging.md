@@ -1,4 +1,4 @@
-# Release packaging (Phase 8.3)
+# Release packaging
 
 Packaging creates no Git tags, GitHub Releases or GHCR publications. The separate
 [manual publisher](publishing.md) verifies state and promotes validated candidates.

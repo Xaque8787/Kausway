@@ -1,8 +1,9 @@
-# Shared configuration and storage (Phase 1)
+# Shared configuration and storage
 
 The `kausway-config` crate supplies the schema, platform paths, private filesystem
-helpers, configuration revisions and diagnostic metadata for the host and future
-manager/admin. The manager is now implemented in Phase 2; see [manager operations](../operations/manager.md). The [admin executable](../operations/admin.md) now supplies Phase 3 account setup and authentication.
+helpers, configuration revisions and diagnostic metadata for the host, manager
+and admin. See [manager operations](../operations/manager.md) and
+[admin setup](../operations/admin.md) for their launch and account interfaces.
 
 ## Host use
 
@@ -21,6 +22,7 @@ explicitly override a saved true value; the flag without a value means true.
 | --- | --- | --- |
 | Linux | `$XDG_CONFIG_HOME/kausway/config.toml` or `~/.config/kausway/config.toml` | `$XDG_DATA_HOME/kausway` or `~/.local/share/kausway` |
 | Android native CLI | Absolute XDG/HOME paths as on Linux; otherwise `<cwd>/kausway/config.toml` | Absolute XDG/HOME paths as on Linux; otherwise `<cwd>/kausway/data` |
+| Official Linux container suite | `/config/config.toml` selected by image environment | `/data` selected by image environment |
 | macOS | `~/Library/Application Support/Kausway/config.toml` | `~/Library/Application Support/Kausway` |
 | Windows | `%LOCALAPPDATA%\Kausway\config.toml` | `%LOCALAPPDATA%\Kausway` |
 
@@ -34,6 +36,11 @@ Its explicit `--data-dir` / `KAUSWAY_CLIENT_DATA_DIR` wins. Other CLI client pla
 retain `./kausway-client-data`; client configuration-file/TUI integration is separate work.
 The Android SDK already uses app-private storage and is unchanged.
 See [Android storage](../android/storage.md) for terminal and app integration examples.
+
+Copying binaries into a different Docker image does not copy the suite image's
+environment or volumes. Without explicit overrides they use the final image's
+Linux account/HOME/XDG defaults. Supply writable, persisted directories explicitly
+when embedding; see [Docker integration](../integrations/docker-suite.md).
 
 Windows/macOS path rules are implemented assumptions, not platform validation.
 Native build and runtime checks will be added with their release workflows.
@@ -76,11 +83,12 @@ Host values are optional. For policy and WebSocket settings, omission preserves
 existing state.json behavior: the live control API's persisted values remain in
 force. Explicit file/environment/CLI values override that state at startup.
 The shared metadata describes startup resolution; it is not a live host snapshot.
-An admin API must combine it with authoritative host state in a later phase.
+Admin combines it with authoritative host state when presenting saved/effective
+values; unavailable runtime values are labeled rather than guessed.
 Unknown fields and unsupported schema versions fail. Control tokens remain in
 protected host state or explicit runtime overrides, never saved settings.
 The manager reads its settings when explicitly launched. The admin section
-provides configuration for the optional launch hook; the web server now provides Phase 3 authentication.
+controls optional manager launch and the admin web server's settings.
 Configuration alone never starts a process.
 
 ## Persistence and security
@@ -110,7 +118,7 @@ secrets for protected persistence and must not be returned directly by an API.
 | Control listener/remote opt-in/token | Restart | Startup configuration/protected state |
 | Transport policy | Existing live API; startup override supported | Host |
 | WebSocket enable/origin-header policy | Existing live API; startup override supported | Host |
-| Data/config location | Launch only; read-only in future admin | Launcher |
+| Data/config location | Launch only; displayed read-only in admin | Launcher |
 | Identity and paired devices | Managed state | Host |
 | Invitations, cancellation, revocation | Existing immediate operations | Host |
 | Session/path diagnostics | Read-only live information | Host |
@@ -118,5 +126,5 @@ secrets for protected persistence and must not be returned directly by an API.
 | Admin listener | Restart | Admin |
 | Admin credentials | Account workflow; invalidate sessions | Admin |
 
-Phase 1 established this foundation. Phase 4 now supplies authenticated configuration
-endpoints and [host administration](../operations/host-administration.md).
+Authenticated configuration endpoints and restart/live-apply behavior are
+described in [host administration](../operations/host-administration.md).

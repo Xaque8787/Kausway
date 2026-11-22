@@ -1,8 +1,8 @@
 # Repository structure
 
-The repository groups reusable engines, platform SDKs, integration examples and
-deployment definitions separately. Public APIs, artifact names, package versions
-and protocol behavior are unchanged by this directory refactor.
+The repository groups reusable engines, platform SDKs, integration examples,
+release tooling and deployment definitions separately. See the root
+[contributor guide](../../CONTRIBUTING.md) for development and publication steps.
 
 ## Build boundaries
 
@@ -12,8 +12,12 @@ and protocol behavior are unchanged by this directory refactor.
 - `integrations/jellyfin/plugin/` and `tests/` retain their assembly names and
   namespaces. `global.json` at their common parent pins the .NET SDK.
 - `scripts/packaging/` owns binary archive and plugin layout generation.
+- `scripts/releases/` owns release versions, candidate verification and manual
+  publication. `releases.toml` declares the independent release tracks.
 - `deploy/jellyfin/` owns the combined image, Compose and container entrypoint.
-  A future standalone host image belongs in `deploy/standalone/`; none is added here.
+- `deploy/standalone/` owns the Linux manager/host/admin suite image and sidecar
+  Compose deployment. `examples/docker-integration/` demonstrates binary-copy
+  integration; `examples/application-integration/` demonstrates backend supervision.
 
 ## Docker paths
 
@@ -39,7 +43,8 @@ Rust tests/formatting, plugin tests/packaging, Android release AAR inspection an
 independent sample/instrumentation APK compilation, Compose path resolution,
 Docker COPY source paths and local documentation links.
 
-GitHub Actions must rerun Build Validation, Android SDK and manual Binaries after
-this change is pushed. Emulator execution is unavailable locally; the complete
-Docker build is subject to the existing Microsoft registry network restriction.
-Historical results in `docs/history/` describe earlier revisions.
+**Build Validation** runs on branch pushes, pull requests and main. It calls the
+binary, SDK, container and candidate-package workflows and requires all results in
+its summary. Final publication is a separate **Publish release** manual dispatch
+on a validated main commit. Historical results and environment limitations in
+`docs/history/` describe earlier revisions rather than current validation results.

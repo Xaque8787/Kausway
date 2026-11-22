@@ -1,4 +1,4 @@
-# Embedding the Kausway suite (Phase 5)
+# Embedding the Kausway suite
 
 An application can ship `kausway`, `kausway-host` and `kausway-admin` beside each
 other, supervise only the manager, and delegate settings/account setup to admin.
@@ -9,6 +9,18 @@ This integration is implemented and validated on Linux. Windows manager/named-pi
 support and native macOS validation remain deferred. Development binary packaging
 is available; [Docker suite integration](docker-suite.md) covers the same process
 contract in containers, sidecar deployment and multi-architecture image publishing.
+
+Keep installed executables separate from writable application-owned config/data:
+
+```text
+application-install/kausway/   kausway, kausway-host, kausway-admin
+application-config/kausway/   config.toml
+application-data/kausway/     host/, manager/, admin/
+```
+
+These directories are on the machine running the processes. The binaries do not
+store state back inside their executable files or installation directory. The
+manager passes the chosen shared config and component paths to its children.
 
 ## Application responsibilities
 
@@ -45,6 +57,10 @@ with SuiteManager(
     suite.admin_entry(open_browser=True)
     run_application()
 ```
+
+The context manager waits for manager/admin readiness and shuts down its owned
+process on exit. In another language use the same documented private protocol;
+the Python helper is an example, not a runtime requirement of the suite.
 
 A small runnable application is also included:
 

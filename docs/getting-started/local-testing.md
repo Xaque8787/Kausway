@@ -35,13 +35,18 @@ Android SDK AAR and do not contain an Android application.
 On Linux, in your download directory, substitute the actual version and filename:
 
 ```sh
-sha256sum -c kausway-host-<suite-version>-x86_64-unknown-linux-musl.tar.gz.sha256
-sha256sum -c kausway-test-client-<client-version>-x86_64-unknown-linux-musl.tar.gz.sha256
-tar -xzf kausway-host-<suite-version>-x86_64-unknown-linux-musl.tar.gz
-tar -xzf kausway-test-client-<client-version>-x86_64-unknown-linux-musl.tar.gz
+SUITE_VERSION='<downloaded-suite-version>'
+CLIENT_VERSION='<downloaded-client-version>'
+TARGET=x86_64-unknown-linux-musl
+HOST_ARCHIVE="kausway-host-$SUITE_VERSION-$TARGET"
+CLIENT_ARCHIVE="kausway-test-client-$CLIENT_VERSION-$TARGET"
+sha256sum -c "$HOST_ARCHIVE.tar.gz.sha256"
+sha256sum -c "$CLIENT_ARCHIVE.tar.gz.sha256"
+tar -xzf "$HOST_ARCHIVE.tar.gz"
+tar -xzf "$CLIENT_ARCHIVE.tar.gz"
 mkdir -p kausway-test-tools
-cp kausway-host-<suite-version>-x86_64-unknown-linux-musl/kausway-host kausway-test-tools/
-cp kausway-test-client-<client-version>-x86_64-unknown-linux-musl/kausway-test-client kausway-test-tools/
+cp "$HOST_ARCHIVE/kausway-host" kausway-test-tools/
+cp "$CLIENT_ARCHIVE/kausway-test-client" kausway-test-tools/
 cd kausway-test-tools
 chmod +x kausway-host kausway-test-client
 ./kausway-host --version

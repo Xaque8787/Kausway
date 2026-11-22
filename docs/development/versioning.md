@@ -1,4 +1,4 @@
-# Release versions and component registration (Phase 8.1)
+# Release versions and component registration
 
 `releases.toml` is the source of truth for release versions. Edit it, synchronize,
 review the diff, and commit all affected files together:
@@ -37,7 +37,7 @@ consumers. Private config and transport crates also follow the suite version;
 their versions do not define the wire protocol or require matching client releases.
 Local path dependencies can reference these crates across release-track versions.
 
-The CLI still resides in the host Cargo package during 8.1, but its `--version`
+The CLI resides in the host Cargo package, but its `--version`
 uses the client engine's `VERSION` constant. Android Gradle reads its generated
 `release-version.properties`; the SDK POM and sample consume that client version.
 
@@ -93,7 +93,7 @@ release system plugin builds/tests still run for prereleases, but the plugin is
 distributed only with stable suite releases. The version helper exposes this
 distinction; candidate and publication inventory checks enforce it.
 
-## Existing callers and the Phase 8 boundary
+## Checks and build callers
 
 `bash scripts/ci/check-version.sh` validates all registrations and prints the suite
 version for existing callers. `--track client` or `--track container` prints that
