@@ -6,18 +6,16 @@ The host and client can run on the same computer or on separate computers.
 
 ## 1. Download the CLI binaries
 
-Open [Kausway Releases](https://github.com/Xaque8787/Kausway/releases) and download
-the archive for **the computer that will run each binary**. If no release has been
-published in the new layout, open [Actions → Build Validation](https://github.com/Xaque8787/Kausway/actions/workflows/build-validation.yml),
-select a successful run and download its platform artifact (GitHub sign-in may be
-required). Extract the artifact ZIP, then its contained `.tar.gz` archive.
+Open the [latest suite release](https://github.com/Xaque8787/Kausway/releases/latest)
+for the host. For the CLI client, open [Releases](https://github.com/Xaque8787/Kausway/releases)
+and choose the newest stable **Client** release. Select archives for **the computer
+that will run each binary** and download each adjacent `.sha256` file.
 
 Download the standalone **host** archive from the suite release and the separate
 **test-client** archive from the client release. Extract each and copy its executable
 into a working directory such as `kausway-test-tools`; the following commands use
 that directory. If they run on different computers, download the matching CPU for
-each. Suite/client versions are independent. Legacy `v0.4.0` assets retain their
-original combined layout; use their actual filenames when checking/extracting.
+each. Suite/client versions are independent.
 
 | Computer | Archive suffix |
 |---|---|
@@ -27,8 +25,7 @@ original combined layout; use their actual filenames when checking/extracting.
 | Android 32-bit ARM | `armv7-linux-androideabi.tar.gz` |
 
 The full filename is `kausway-host-<suite-version>-<suffix>` or
-`kausway-test-client-<client-version>-<suffix>`. Development filenames additionally
-include their build suffix. Native Windows and macOS CLI
+`kausway-test-client-<client-version>-<suffix>`. Native Windows and macOS CLI
 binaries are not currently built. The Android CLI archives are different from the
 Android SDK AAR and do not contain an Android application.
 

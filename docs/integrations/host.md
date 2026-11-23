@@ -13,6 +13,7 @@ separate from the origin application's user authentication.
 - [Host setup and configuration](../getting-started/host.md)
 - [Control API v1](../../protocol/control-v1.md)
 - [Transport protocol v1](../../protocol/transport-v1.md)
+- [Jellyfin setup and deployment](jellyfin.md)
 - [Jellyfin reference plugin](../../integrations/jellyfin/plugin/)
 - [Combined Jellyfin deployment](../../deploy/jellyfin/compose.yaml)
 

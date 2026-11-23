@@ -4,6 +4,24 @@ The repository groups reusable engines, platform SDKs, integration examples,
 release tooling and deployment definitions separately. See the root
 [contributor guide](../../CONTRIBUTING.md) for development and publication steps.
 
+## Repository map
+
+| Directory | Purpose |
+|---|---|
+| `rust/` | Rust workspace: transport, host, configuration, manager, shared client engine and Android JNI adapter |
+| `sdks/android/` | Kotlin SDK, Gradle wrapper and Android build configuration |
+| `examples/android-basic/` | Example consuming the built AAR; included as Gradle project `:sample` |
+| `integrations/jellyfin/` | Reference plugin, tests and pinned .NET SDK |
+| `deploy/jellyfin/` | Combined Jellyfin/Kausway Dockerfile, Compose and entrypoint |
+| `deploy/standalone/` | Multi-architecture manager/host/admin suite image and sidecar Compose |
+| `scripts/android/` | Native/AAR builds, artifact inspection and emulator fixtures |
+| `scripts/ci/` | Version checks and end-to-end/smoke validation |
+| `scripts/packaging/` | Binary/SDK/plugin packaging and verified image staging |
+| `scripts/releases/` | Independent release versions, candidate inventories and manual publication |
+| `protocol/` | Transport and control API contracts |
+| `docs/` | Current guides, architecture, operations and historical records |
+| `.github/workflows/` | Parent Build Validation, reusable development builds and manual main-only publication |
+
 ## Build boundaries
 
 - `rust/` remains the existing Cargo workspace with the same crate boundaries.

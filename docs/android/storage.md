@@ -81,8 +81,8 @@ are Linux suite components and are not Android integration targets.
 ## Termux client test
 
 Download the Android **test-client** archive matching the phone's supported
-userland ABI, plus its `.sha256`, from a client release or a successful
-[Build Validation artifact](../development/ci.md). Do not use a Linux musl archive
+userland ABI, plus its `.sha256`, from the newest stable **Client** release on
+[GitHub Releases](https://github.com/Xaque8787/Kausway/releases). Do not use a Linux musl archive
 or the SDK AAR for these terminal commands. If downloaded through the phone's
 browser, grant Termux shared-storage access once with `termux-setup-storage`.
 
@@ -103,7 +103,7 @@ cd "$ARCHIVE"
 ./kausway-test-client --version
 ```
 
-For development downloads, extract the outer Actions ZIP first and use the full
+For [development downloads](../development/ci.md), extract the outer Actions ZIP first and use the full
 `-dev.g<commit>` version in its contained filename. Android shared storage is for
 transferring downloads; run executables and keep identities in Termux-private HOME.
 

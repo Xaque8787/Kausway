@@ -1,69 +1,140 @@
 # Docker suite and application integration
 
-The suite image contains `kausway` (manager), `kausway-host` and `kausway-admin`.
-The CLI client is a separate client-track download. The image's default command
-starts the manager with admin enabled. The manager owns its children; it does not
-adopt a host which another process already started.
+The published suite image contains `kausway` (manager), `kausway-host` and
+`kausway-admin`. Its default command starts the manager with admin enabled.
+It runs beside your existing HTTP application; it does not contain a media server.
+The CLI client is a separate download from a published **Client** release.
+For the source-built Jellyfin/host/plugin image, see [Jellyfin integration](jellyfin.md).
 
-Development images are produced by **Build Validation** on any branch or PR and
-are downloadable Actions artifacts, not GHCR publications. The parent calls the
-read-only **Development containers** workflow on native AMD64/ARM64 runners, reusing
-verified binary archives from that same run. Both architectures run the suite and
-Alpine/Ubuntu embedding tests. See [CI details](../development/ci.md).
+## Start with Compose
 
-Published-image examples below are for eventual stable distribution. Until a
-release is available, use a locally loaded artifact or source build. Only the
-manual main-branch **Publish release** workflow publishes final images.
-Do not interpret development artifact availability as a registry release.
+Save this complete file as `compose.yaml` in a new directory. No repository clone,
+build command, origin override or initial credentials are required. The same file
+is maintained at [deploy/standalone/compose.yaml](../../deploy/standalone/compose.yaml).
 
-## Buildx, publication and architectures
+```yaml
+services:
+  kausway:
+    image: ghcr.io/xaque8787/kausway:latest
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 45s
+    ports:
+      - "127.0.0.1:47951:47951"
+    volumes:
+      - kausway-config:/config
+      - kausway-data:/data
+    # Image defaults: KAUSWAY_CONFIG=/config/config.toml, KAUSWAY_DATA_ROOT=/data.
+    # No command or host origin override: complete first-run setup in admin.
+    # Set origin to http://<application-service-name>:<port> on a shared network.
 
-Automatic development builds neither authenticate to GHCR nor move `latest`.
-The final release system publishes one multi-architecture index after both CPU
-variants pass. Integrations should pin a version or **image-index digest** rather
-than assume a development image is available under `latest`. That tag tracks the
-most recent published stable container release, not main; prereleases never move
-it. See [publication and recovery](../development/publishing.md).
-
-```sh
-docker pull ghcr.io/xaque8787/kausway:latest
-docker buildx imagetools inspect ghcr.io/xaque8787/kausway:latest
+volumes:
+  kausway-config:
+  kausway-data:
 ```
 
-The index contains `linux/amd64` and `linux/arm64`. Docker selects the current
-target automatically. Unsupported targets fail rather than using the wrong CPU.
-No Android, Windows, macOS or 32-bit Linux container is published.
-
-To build from repository source (root directory is the build context):
-
 ```sh
-docker buildx build --platform linux/amd64 --load \
-  --build-arg VCS_REF="$(git rev-parse HEAD)" \
-  -f deploy/standalone/Dockerfile -t kausway-suite:local .
-
-# Requires builders for both platforms, or configured emulation, and registry access:
-docker buildx build --platform linux/amd64,linux/arm64 \
-  -f deploy/standalone/Dockerfile -t YOUR_REGISTRY/kausway:development --push .
+docker compose pull
+docker compose up -d
+docker compose logs kausway
 ```
 
-The source Dockerfile compiles static musl binaries. CI compiles on native runners,
-verifies ELF architecture/static linkage, stages notices with
-`scripts/packaging/stage-container.py`, and uses `runtime.Dockerfile`. The runtime
-contract is the same. Development source builds do not download release binaries.
-Final container publication instead verifies the explicitly selected suite release
-and stages its existing binaries with `stage-container-release.py`.
-For a build behind a TLS-inspecting proxy, the source Dockerfile accepts
-`--secret id=proxy_ca,src=/path/to/combined-ca-bundle.pem`. This temporary build
-mount is not included in the runtime image. Never disable certificate verification.
+Open the expiring setup link on the Docker host, create an administrator and sign
+in. In **Settings**, set `host.origin` to your application's reachable plain HTTP
+address without a path or query, save, then choose **Start**. A fresh suite leaves
+the host disabled. Devices and invitations become available after it starts.
+The manager owns its host/admin children; it does not adopt an already running host.
+If the initial link expires before account creation, issue a new one with
+`docker compose exec kausway kausway-admin setup-link --data-dir /data/admin`.
+After account creation, sign in with that account; see [credential recovery](../operations/admin.md#terminal-provisioning-and-recovery).
 
-Development Actions artifacts are single-platform Docker archives, not registry indexes:
+Leave `KAUSWAY_HOST_ENABLED` unset when the saved desired state should survive
+container recreation. That variable selects initial state on each launch;
+Start/Stop can still change it during the current run.
 
-```sh
-gzip -dc kausway-suite-amd64.docker.tar.gz | docker load
-# Loaded name: kausway-suite:test. Select the matching CPU artifact.
+The example uses `latest`, which follows the most recent published stable
+**container** release, not development commits or GitHub's latest suite release.
+Docker selects `linux/amd64` or `linux/arm64` from the published image index.
+No Android, Windows, macOS or 32-bit Linux container is published. For a deployment
+that must stay on one image, select a published version tag or image-index digest.
+
+## Reach your application
+
+The origin must be reachable from the Kausway container:
+
+- On a shared Compose network, use the application's service name and **internal**
+  port, for example `http://media-server:8096`.
+- Separate Compose projects normally have separate networks. Attach both services
+  to an explicitly shared Docker network before using service-name addresses.
+- A LAN-reachable service can use its LAN address and listening port.
+- `127.0.0.1` inside this container refers to Kausway itself, not another container
+  or the Docker host.
+
+For an application already running in a different Compose project, find its
+network with `docker network ls`. Merge this fragment into the Kausway Compose
+file, replacing `your-media-project_default` with that existing network's name:
+
+```yaml
+services:
+  kausway:
+    networks:
+      - media
+networks:
+  media:
+    external: true
+    name: your-media-project_default
 ```
 
-## Run the suite or use it as a sidecar
+Recreate the Kausway service with `docker compose up -d`. It can then use the
+application's service name/internal port as origin, provided the application is
+attached to that network. Keep the existing image, ports and volumes in the file.
+
+For a host-machine service, Docker Desktop supplies `host.docker.internal`.
+On Linux Docker Engine, add this to the `kausway` service:
+
+```yaml
+extra_hosts:
+  - "host.docker.internal:host-gateway"
+```
+
+Then use `http://host.docker.internal:<application-port>` as origin. The application
+must listen on an interface reachable from Docker, and its firewall must permit
+that traffic. A service bound only to host `127.0.0.1` is not reachable through the
+Linux gateway mapping. Use a reachable interface or a deliberately configured
+network arrangement.
+
+Only admin's browser port is mapped, bound to the Docker host's loopback. Host
+control remains `127.0.0.1:47950` **inside the suite container**; it has no published
+port. Manager/admin private sockets are files under `/data`, not network services.
+`EXPOSE` is metadata, not a port publication. Compose `command:` replaces CMD;
+`environment:` sets environment values. Neither port publication nor Docker
+networking configures the host origin.
+
+Peer transport needs working outbound networking, DNS and relay access. No fixed
+inbound peer port is published by this example; direct connectivity depends on the
+network, with relay fallback under the selected policy. Host control is unrelated
+to peer transport.
+
+Admin listens on `0.0.0.0:47951` inside the image so Docker can forward it. Its
+browser origin remains localhost. On a remote Docker server, use SSH forwarding
+from your local computer:
+
+```sh
+ssh -N -L 47951:127.0.0.1:47951 user@docker-server
+```
+
+Open the logged setup link locally while that tunnel is running. This is local
+management; public hostname/reverse-proxy admin deployment is outside the current
+admin URL policy. To change the local browser port, update **both** values:
+
+```yaml
+ports:
+  - "127.0.0.1:48000:47951"
+environment:
+  KAUSWAY_ADMIN_BROWSER_BASE_URL: http://127.0.0.1:48000
+```
+
+## Run without Compose
 
 ```sh
 docker run -d --name kausway --init --restart unless-stopped \
@@ -74,51 +145,8 @@ docker run -d --name kausway --init --restart unless-stopped \
 docker logs kausway
 ```
 
-No command, origin or credentials must be supplied. Open the expiring setup link
-from the logs, create an account, configure the origin in admin, save, and Start
-host. A fresh suite starts with the host disabled. Leave `KAUSWAY_HOST_ENABLED`
-unset when the saved desired state should survive container recreation. That
-variable selects initial state at each launch; Start/Stop can still change state
-during the current run.
-
-`deploy/standalone/compose.yaml` supplies the same defaults and named volumes:
-
-```sh
-docker compose -f deploy/standalone/compose.yaml up -d
-docker compose -f deploy/standalone/compose.yaml logs kausway
-```
-
-For a sidecar, put this service and the application's service on the same Compose
-network. In admin use `http://application:8080` (the actual service name/internal
-port) as host origin. `127.0.0.1` inside the suite is the suite container, not a
-different application container. A host application's address also needs an
-appropriate Docker gateway mapping; it is not automatically container localhost.
-
-Only admin's browser port is mapped, bound to the Docker host's loopback. Host
-control remains `127.0.0.1:47950` **inside the suite container**; it has no published
-port. Manager/admin private sockets are files under `/data`, not network services.
-`EXPOSE` is metadata, not a port publication. Docker networking/port publication
-does not configure Kausway's origin or otherwise turn a command into an environment
-variable: Compose `command:` replaces CMD; `environment:` sets environment values.
-
-Peer transport needs working outbound networking, DNS and relay access. No fixed
-inbound peer port is published by this example; direct connectivity depends on the
-network, with relay fallback under the selected policy. Host control is unrelated
-to peer transport.
-
-Admin listens on `0.0.0.0:47951` inside the image so Docker can forward it. Its
-browser origin remains localhost. This is local management, not a remotely exposed
-admin deployment. On a remote Docker server use SSH local port forwarding. A
-public hostname/reverse-proxy deployment is outside the current admin URL policy.
-
-To use a different local browser port, update **both** the mapping and browser URL:
-
-```yaml
-ports:
-  - "127.0.0.1:48000:47951"
-environment:
-  KAUSWAY_ADMIN_BROWSER_BASE_URL: http://127.0.0.1:48000
-```
+Use the same setup and origin steps above. To update a Compose deployment, run
+`docker compose pull` followed by `docker compose up -d`; keep both volumes.
 
 ## Persistent configuration and data
 
@@ -334,6 +362,51 @@ These commands act on existing processes. Starting another persistent manager
 through `docker exec` is not a container restart strategy. A `docker exec ...
 kausway shutdown` stops the suite's main process, so container restart policy may
 restart the container. Use `kausway stop` to stop only its host while retaining admin.
+
+## Source builds and development images
+
+Development images come from **Build Validation** on branches and pull requests.
+They are downloadable Actions artifacts, not GHCR releases, and never move
+`latest`. The parent calls **Development containers** on native AMD64/ARM64 runners
+and reuses verified binary archives from the same run. See [CI details](../development/ci.md).
+
+To build from repository source (root directory is the build context):
+
+```sh
+docker buildx build --platform linux/amd64 --load \
+  --build-arg VCS_REF="$(git rev-parse HEAD)" \
+  -f deploy/standalone/Dockerfile -t kausway-suite:local .
+
+# Requires builders for both platforms, or configured emulation, and registry access:
+docker buildx build --platform linux/amd64,linux/arm64 \
+  -f deploy/standalone/Dockerfile -t YOUR_REGISTRY/kausway:development --push .
+```
+
+The source Dockerfile compiles static musl binaries. CI compiles on native runners,
+verifies ELF architecture/static linkage, stages notices with
+`scripts/packaging/stage-container.py`, and uses `runtime.Dockerfile`. The runtime
+contract is the same. Development source builds do not download release binaries.
+Final container publication instead verifies the explicitly selected suite release
+and stages its existing binaries with `stage-container-release.py`.
+For a build behind a TLS-inspecting proxy, the source Dockerfile accepts
+`--secret id=proxy_ca,src=/path/to/combined-ca-bundle.pem`. This temporary build
+mount is not included in the runtime image. Never disable certificate verification.
+
+Development Actions artifacts are single-platform Docker archives, not registry indexes:
+
+```sh
+gzip -dc kausway-suite-amd64.docker.tar.gz | docker load
+# Loaded name: kausway-suite:test. Select the matching CPU artifact.
+```
+
+Inspect the published multi-architecture index with:
+
+```sh
+docker buildx imagetools inspect ghcr.io/xaque8787/kausway:latest
+```
+
+Final publication is a separate manual, main-only operation. See
+[publication and recovery](../development/publishing.md).
 
 ## Validation
 

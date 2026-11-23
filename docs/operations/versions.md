@@ -1,10 +1,13 @@
-# Pinned Versions
+# Build dependencies and release versions
+
+Product versions are declared in `releases.toml`, not maintained in this table.
+Suite, client and container are independent tracks; the Jellyfin plugin derives
+its version from the suite. See [version synchronization](../development/versioning.md)
+and [published releases](https://github.com/Xaque8787/Kausway/releases).
+The exact toolchain and dependency pins below support reproducible source builds.
 
 | Component | Version | Where pinned | Why |
 |---|---|---|---|
-| Suite / client release tracks | both prepared as `0.5.0` | `releases.toml`, synchronized Cargo/SDK metadata | Independent tracks; protocol compatibility is separate. See the [version guide](../development/versioning.md). |
-| Container release track | `0.1.0` (first release prepared) | `releases.toml` | Explicitly selects suite `0.5.0`; publish through the manual main-only launcher after main validation. |
-| Kausway Jellyfin plugin release | `0.5.0.0` | synchronized from the suite track into plugin `.csproj` and `meta.json` | Built from local source; Docker checks suite versions and startup replaces persistent older plugin copies. |
 | Iroh | `=1.4.1` | `rust/Cargo.toml` | Current stable 1.x. The APIs used (`presets::Minimal`, `RelayMode`, `RelayMap`, `SecretKey`, `Connection::paths()`, `TransportAddr::is_relay`) were checked against the 1.4.1 source and docs.rs. The exact pin stops a minor update from silently changing behavior. |
 | Rust toolchain | `1.99.1` | `rust/rust-toolchain.toml`, CI, Dockerfile | Current stable at time of writing. Builds are reproducible with one compiler. |
 | Rust MSRV | `1.91` | `rust-version` in `rust/Cargo.toml`, CI `msrv` job | Iroh 1.4.1 needs edition 2024 and Rust 1.91. The host uses `File::try_lock` (stable since 1.89). |
@@ -16,14 +19,14 @@
 | .NET SDK | `10.0.403` | `integrations/jellyfin/global.json`, Dockerfile (`mcr.microsoft.com/dotnet/sdk:10.0.403@sha256:de4fe90a…dc02b`) | Latest .NET 10 SDK; Jellyfin 12.4 runs on .NET 10. `global.json` allows newer patch releases only. |
 | Plugin test packages | xunit `2.9.3`, xunit.runner.visualstudio `4.0.1`, Microsoft.NET.Test.Sdk `18.11.0` | test `.csproj` | Current stable releases. |
 
-Full base-image digests are in the Dockerfiles. Prepared product versions are not
-proof of publication; use GitHub Releases and GHCR to confirm distributed assets.
+Full base-image digests are in the Dockerfiles.
 
 ## Policy
 
 - Build dependency/base images do not use `latest`. The suite deliberately publishes
   a `latest` convenience tag only on a manual stable container release from main;
-  integrations should pin a version or index digest.
+  quick starts use that tag. Choose a published version or index digest when a
+  deployment should stay on a specific release.
 - Upgrading Iroh means re-verifying the API, then re-running the transport tests and the real-network checks in `docs/architecture/transport-policies.md`.
 - Upgrading Jellyfin means changing the image, the two SDK packages and `targetAbi` together.
 - `cargo update` is a deliberate change reviewed in its own commit.

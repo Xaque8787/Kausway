@@ -6,12 +6,13 @@ It provides first-run setup, sign-in/out, administrator credential changes and
 settings, invitations, devices, sessions and manager-backed lifecycle controls.
 No Node runtime or separate frontend server is needed.
 
-## Build and start
+## Install and start
+
+Download the suite or standalone admin archive from the
+[latest suite release](https://github.com/Xaque8787/Kausway/releases/latest).
+For source builds, see [Contributing](https://github.com/Xaque8787/Kausway/blob/main/CONTRIBUTING.md#build-from-source).
 
 ```sh
-cargo build --manifest-path rust/Cargo.toml \
-  -p kausway-host -p kausway-manager -p kausway-admin --bins --locked
-
 # Standalone; does not require a host or manager.
 kausway-admin
 
@@ -22,8 +23,9 @@ kausway-admin --config /app/config/config.toml --data-dir /app/data/admin
 kausway run --config /app/config/config.toml --data-root /app/data --admin-ui
 ```
 
-Build outputs are in `rust/target/debug/` unless `CARGO_TARGET_DIR` is set. The
-commands assume the executables are on PATH; otherwise use their full paths.
+The commands assume the executables are on PATH; otherwise use their full paths
+or `./kausway-admin` / `./kausway` from the extracted archive directory. A separately
+downloaded manager also needs the host and optional admin companions.
 
 Admin defaults to `127.0.0.1:47951`. Paths follow the shared
 [platform rules](../architecture/configuration-and-storage.md). Its `--data-dir`

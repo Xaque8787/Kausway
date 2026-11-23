@@ -15,8 +15,8 @@ The CLI client and Android SDK are separate client-track downloads.
 
 ## 1. Choose and verify a download
 
-Open [Kausway Releases](https://github.com/Xaque8787/Kausway/releases) and choose a
-`suite-v<version>` release. One page contains all its architectures and components.
+Open the [latest stable suite release](https://github.com/Xaque8787/Kausway/releases/latest)
+(`suite-v<version>`). One page contains all its architectures and components.
 For a full suite, select:
 
 | Linux computer | Archive |
@@ -27,12 +27,6 @@ For a full suite, select:
 `uname -m` reports the machine architecture. These static musl builds work on
 ordinary Alpine and glibc-based Linux systems. Android has separate host/client
 archives; manager/admin, Windows and macOS downloads are not currently built.
-
-Until a new-layout suite release exists, use a successful **Build Validation**
-run's binary artifact for the same CPU. Extract its outer Actions ZIP first.
-Development archive versions include `-dev.g<commit>`; use the complete version
-from the downloaded filename. Existing `v0.4.0` releases keep their older layout.
-See [development downloads](../operations/development-binaries.md).
 
 Download the adjacent `.sha256` file, then run in the download directory:
 

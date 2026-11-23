@@ -26,12 +26,13 @@ The workflow must first exist on the default branch for GitHub to expose the
 manual launcher. Do not run the retired Binaries/container publishers from an old
 commit or branch. They are removed from the current workflow model.
 
-The prepared versions are suite/client `0.5.0` and container `0.1.0`, selecting
-suite `0.5.0`. Existing `v0.4.0` counts as published suite/client history, so its
-version cannot be reused as a new release. Version declarations alone publish
-nothing. The first container release needs a published **new-layout** suite
-matching `container.suite_version`. Select suite and container together, or publish
-that suite first. Legacy combined archives are not substituted.
+Read the selected versions from `releases.toml`; version declarations alone publish
+nothing. Existing releases, including legacy `v0.4.0` suite/client history, cannot
+be reused as new releases. Container publication needs a published suite matching
+`container.suite_version` in the current archive layout. Select suite and container
+together if that suite is not yet published, or publish the suite first. A
+container-only release can reuse an already published suite. Legacy combined
+archives are not substituted.
 
 ## What the launcher pins and verifies
 
@@ -194,8 +195,7 @@ another track fails.
 
 Publisher-only maintenance can be merged to main after normal validation with no
 product-version bump or publishing run. It applies to future manual releases.
-Already published `0.5.0` suite/client assets and container `0.1.0` do not need
-republishing for these improvements. Keep their tags bound to their original
+Existing product releases do not need republishing for these improvements. Keep their tags bound to their original
 commit; dispatching the same versions from a newer main commit is not an upgrade
 or a way to apply workflow-only changes to existing releases.
 

@@ -38,7 +38,8 @@ EXECUTABLES = SUITE + CLIENT
 ROOT_PACKAGES = {'linux': ['kausway-host', 'kausway-manager', 'kausway-admin'], 'android': ['kausway-host']}
 DOCS = ['docs/architecture/configuration-and-storage.md', 'docs/android/storage.md', 'docs/android/README.md',
         'docs/history/android-implementation-plan.md', 'docs/history/android-validation.md',
-        'docs/getting-started/suite.md',
+        'docs/getting-started/suite.md', 'docs/getting-started/host.md',
+        'docs/getting-started/local-testing.md', 'docs/integrations/jellyfin.md',
         'docs/development/ci.md', 'docs/development/versioning.md', 'docs/development/release-packaging.md',
         'docs/development/publishing.md', 'docs/operations/versions.md',
         'docs/operations/admin.md', 'docs/operations/manager.md', 'docs/operations/host-administration.md',
@@ -48,7 +49,8 @@ DOCS = ['docs/architecture/configuration-and-storage.md', 'docs/android/storage.
         'protocol/control-v1.md', 'protocol/transport-v1.md']
 EXAMPLES = ['examples/application-integration/README.md', 'examples/application-integration/application.py',
             'examples/application-integration/kausway.py', 'examples/docker-integration/Dockerfile',
-            'examples/docker-integration/entrypoint.sh', 'examples/docker-integration/supervise.py']
+            'examples/docker-integration/entrypoint.sh', 'examples/docker-integration/supervise.py',
+            'deploy/standalone/compose.yaml']
 
 
 def sha256(path):

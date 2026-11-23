@@ -6,17 +6,14 @@ Linux is the validated release platform. Unix IPC/signals are implemented;
 Windows currently returns an explicit unsupported-platform error. No Windows or
 macOS release support is claimed by these Linux checks.
 
-## Build and launch
+## Install and launch
 
-From the repository root:
-
-```sh
-cargo build --manifest-path rust/Cargo.toml -p kausway-manager -p kausway-host -p kausway-admin --bins --locked
-```
-
-The binaries are in `rust/target/debug/` unless `CARGO_TARGET_DIR` overrides it.
-The commands below assume that directory is on PATH; otherwise use each
-executable's full path. Downloaded suite archives can be run with `./kausway`.
+Download a suite archive from the
+[latest suite release](https://github.com/Xaque8787/Kausway/releases/latest), or
+obtain the manager and its host/admin companions separately. For source builds,
+see [Contributing](https://github.com/Xaque8787/Kausway/blob/main/CONTRIBUTING.md#build-from-source).
+The commands below assume the executables are on PATH; otherwise use their full
+paths or run `./kausway` from the extracted suite directory.
 The manager finds siblings beside its own executable, not through the working
 directory or PATH. `--host-binary PATH` / `KAUSWAY_HOST_BINARY` and
 `--admin-binary PATH` / `KAUSWAY_ADMIN_BINARY` select explicit executables.

@@ -7,12 +7,11 @@ engine and never adopts or signals a host process itself.
 
 ## Full suite
 
-Build the three executables beside each other, then run:
+Download and extract the [published suite](https://github.com/Xaque8787/Kausway/releases/latest).
+Keep the three executables beside each other. With them on PATH (or using
+`./kausway` from the extracted directory), run:
 
 ```sh
-cargo build --manifest-path rust/Cargo.toml \
-  -p kausway-host -p kausway-manager -p kausway-admin --bins --locked
-
 kausway run --config /app/config/config.toml --data-root /app/data --admin-ui
 ```
 

@@ -22,12 +22,9 @@ and app-private directory selection.
   No Rust installation, JNA, native pointer handling or separate .so download is needed.
 
 Download the versioned AAR from a `client-v<version>` release on
-[GitHub Releases](https://github.com/Xaque8787/Kausway/releases). Earlier `v0.4.0`
-keeps its original SDK assets. Verify the accompanying SHA-256 checksum and place
-the AAR in `app/libs`. Replace `<client-version>` in the filenames below with
-the actual downloaded client version. Development builds are available through
-[Build Validation](../development/ci.md); choose the SDK candidate artifact from a
-successful full run, rather than treating an early diagnostic artifact as validated:
+[GitHub Releases](https://github.com/Xaque8787/Kausway/releases). Choose the newest
+stable **Client** release, verify the accompanying SHA-256 checksum and place the
+AAR in `app/libs`. Replace `<client-version>` below with its actual version:
 
 ```kotlin
 plugins { id("org.jetbrains.kotlin.android") }
@@ -227,6 +224,10 @@ an app that leaks the URL. They are not server-side authentication. The CLI reta
 its historical unprefixed local URL and should be used only for development.
 
 ## Build, test and distribute
+
+Unreleased SDK builds are available through [Build Validation](../development/ci.md).
+Choose the SDK candidate artifact from a successful full run; an early diagnostic
+artifact alone does not establish that validation passed.
 
 See [implementation-plan.md](../history/android-implementation-plan.md) for the extraction design.
 Prerequisites: Rust 1.99.1, Java 17+, Android SDK 35/build-tools 35.0.0, NDK

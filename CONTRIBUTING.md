@@ -35,6 +35,34 @@ checks, containers and release-candidate packaging. They publish no final releas
 Version bumps are release preparation, not a requirement for each development
 commit. Publishing is an explicit maintainer operation after main validation.
 
+## Build from source
+
+Use the [pinned tools](docs/operations/versions.md). The [repository map](docs/operations/repository-structure.md)
+explains the Rust, SDK, integration and deployment boundaries. From the repository
+root, build the manager, host and admin executables with:
+
+```sh
+(cd rust && cargo build --release --locked -p kausway-manager -p kausway-host -p kausway-admin --bins)
+```
+
+Executables are under `rust/target/release/` unless `CARGO_TARGET_DIR` is set.
+The host package also builds the CLI client. Keep source-built binaries separate
+from persistent application data. For other builds, see the
+[Android SDK](docs/android/README.md#build-test-and-distribute),
+[Jellyfin deployment](docs/integrations/jellyfin.md), and
+[suite Dockerfile](docs/integrations/docker-suite.md#source-builds-and-development-images).
+Common integration checks, from the repository root:
+
+```sh
+dotnet test integrations/jellyfin/tests/Jellyfin.Plugin.Kausway.Tests.csproj -c Release
+# Requires Android SDK/NDK and Java 17; see the SDK guide for setup:
+bash scripts/android/build-aar.sh
+(cd sdks/android && ./gradlew :sample:assembleDebug :kausway-client:assembleDebugAndroidTest)
+```
+
+Maven Central publication and iOS bindings are planned separately. To create
+downloadable archives, follow [development packaging](docs/operations/development-binaries.md).
+
 ## Prepare and publish a release
 
 1. On the development branch, choose the suite, client and/or container versions

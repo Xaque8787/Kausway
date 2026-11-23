@@ -1,152 +1,86 @@
-# Run the Kausway host
+# Run the standalone host
 
-For manager/admin setup, start with [Install and run the suite](suite.md).
-For a host/CLI walkthrough, see [Quick start: local testing](local-testing.md).
-See the [complete CLI reference](../operations/cli-reference.md) for all arguments.
+`kausway-host` forwards paired clients' HTTP requests to one existing application.
+It can be supervised by your application or run in a terminal. It does not require
+Jellyfin, the manager, or admin. For the managed browser setup, use
+[the suite walkthrough](suite.md); for containers, use [the Docker guide](../integrations/docker-suite.md).
 
-Private remote access to a home media server over [Iroh](https://www.iroh.computer/) peer-to-peer connections, without port forwarding or a hosted backend.
+## Download and start
 
-The core is a standalone Rust host, `kausway-host`. It knows nothing about Jellyfin. It forwards HTTP requests from paired devices to one configurable local origin. Jellyfin is the first integration, through an admin plugin. Another media server could bundle the same executable.
+Open the [latest suite release](https://github.com/Xaque8787/Kausway/releases/latest)
+and download the standalone host archive for the machine that will run it. Verify
+its adjacent `.sha256` file before extracting. Linux builds are static musl for
+x86-64/ARM64; Android host builds require API 24+ and the matching ARM ABI.
+[Archive selection and extraction](suite.md#1-choose-and-verify-a-download) explains
+filenames; native Windows/macOS downloads are not currently supplied.
 
-Linux suite binaries, Android host/CLI downloads and the Android client SDK are
-built by [Build Validation](../development/ci.md). The optional manager/admin can
-be embedded or deployed as a [Docker sidecar](../integrations/docker-suite.md).
-Windows/macOS native release workflows and Android manager/admin are not supplied.
-Earlier naming and validation records are retained under `docs/history/`.
-
-## Running with Docker (Jellyfin + kausway-host)
-
-Requires only Docker with Compose. Everything is compiled inside the build from this repository's sources.
-
-```bash
-git clone https://github.com/Xaque8787/Kausway.git
-cd Kausway
-docker compose -f deploy/jellyfin/compose.yaml up -d --build
-docker compose -f deploy/jellyfin/compose.yaml logs -f        # wait for Jellyfin and "control API v1 listening"
-```
-
-Open http://localhost:8096, finish Jellyfin's setup wizard, then go to Dashboard > Plugins > Kausway Remote Access. From there you can create invitation links, see connected devices with their path (direct or relay) and round-trip time, revoke devices, and change the transport policy.
-
-How the image works:
-
-- At every start, the entrypoint copies the bundled plugin into `./config/plugins/JellyfinKausway_<version>/` (replacing older versions of this plugin only), then launches Jellyfin.
-- `kausway-host` runs as a separate process under the entrypoint's supervisor, which restarts it with backoff if it exits. Jellyfin does not start or stop it.
-- The plugin talks to `kausway-host` only through control API v1 on `127.0.0.1:47950` inside the container. That port is not published. The token is read from `deploy/jellyfin/kausway-data/control.token`.
-- Folders next to `compose.yaml`: `deploy/jellyfin/config`, `deploy/jellyfin/cache`, `deploy/jellyfin/media` (mounted read-only at `/media`; add it as a library), `./kausway-data`.
-
-The image sets `KAUSWAY_CONFIG=/kausway-data/config.toml` and
-`KAUSWAY_DATA_DIR=/kausway-data`. The existing `./kausway-data:/kausway-data`
-bind mount therefore persists the shared Kausway configuration as well as host
-identity, pairings and state. These defaults also apply with `docker run` when
-that directory is mounted. Compose can override them for a custom layout.
-
-Earlier combined images used the host's platform default for its shared config,
-normally `/root/.config/kausway/config.toml`. An existing file is not automatically
-moved. Before replacing an old container, stop the processes and copy that file
-to the persisted location if you need its saved settings, preserving private
-permissions and checking for an existing destination. Alternatively, explicitly
-select and persist a custom config path. Existing `/kausway-data` identity and
-pairing files remain at the same locations.
-
-To update an existing installation after pulling repository changes:
+From the extracted host directory, check the origin and start the host:
 
 ```sh
-docker compose -f deploy/jellyfin/compose.yaml build --pull
-docker compose -f deploy/jellyfin/compose.yaml up -d --force-recreate
-# Confirm the bundled host reports the source checkout's suite version:
-docker compose -f deploy/jellyfin/compose.yaml exec jellyfin kausway-host --version
+./kausway-host doctor --origin http://127.0.0.1:8096
+./kausway-host serve --origin http://127.0.0.1:8096
 ```
 
-The image builds the host and plugin from the checked-out source, not GitHub
-release downloads. Build-time version checks require the host, plugin assembly
-and plugin metadata versions to agree. Recreating the container installs the
-bundled plugin over the persistent copy and removes older Kausway plugin versions;
-Jellyfin configuration, media and Iroh identity remain in the existing mounts.
-The Android AAR is a client dependency and is not needed in the server image.
-The pinned Jellyfin server and its plugin SDK/ABI are updated together; `--pull`
-does not move the image to a different Jellyfin version.
-
-To pair a test device from another machine, use `kausway-test-client pair '<link>'` and `kausway-test-client proxy`, as described below.
-
-## Prebuilt binaries
-
-Download published assets from [Kausway Releases](https://github.com/Xaque8787/Kausway/releases).
-New releases separate suite and client tracks. Each track has one release page
-containing all supported architectures, adjacent checksums and `SHA256SUMS`.
-Existing `v0.4.0` downloads retain their original combined layout.
-
-| File | Runs on |
-|---|---|
-| `kausway-host-<suite-version>-x86_64-unknown-linux-musl.tar.gz` | 64-bit x86 Linux (static, no glibc requirement) |
-| `kausway-host-<suite-version>-aarch64-unknown-linux-musl.tar.gz` | 64-bit ARM Linux |
-| `kausway-host-<suite-version>-aarch64-linux-android.tar.gz` | 64-bit Android 7+ (`adb shell` or Termux) |
-| `kausway-host-<suite-version>-armv7-linux-androideabi.tar.gz` | 32-bit ARM Android 7+ |
-| `JellyfinKausway_<suite-version>.0.zip` | Stable suite releases only; install into Jellyfin's plugins directory |
-
-Linux also has standalone manager/admin archives and a combined
-`kausway-suite-<suite-version>-<target>.tar.gz` containing all three suite binaries.
-Download `kausway-test-client-<client-version>-<target>.tar.gz` from the client
-release for the separate CLI. See [complete asset policy](../development/release-packaging.md).
+Replace the example origin with your application's address. It must be plain
+HTTP with no base path or query and reachable from the host process. Leave
+`serve` running. Defaults create shared configuration and private host storage
+for the executing account; explicit paths can be selected independently:
 
 ```sh
-sha256sum -c --ignore-missing SHA256SUMS
+./kausway-host serve --config /app/config/config.toml \
+  --data-dir /app/data/host --origin http://127.0.0.1:8096
 ```
 
-Linux binaries pass native runtime tests. Android CLI binaries are cross-compiled
-and inspected; the SDK additionally runs real-host emulator tests. The CLI is for
-development/testing. For unreleased builds, download **Build Validation** artifacts
-from a successful run on any branch; see [artifact instructions](../development/ci.md).
+See [platform storage and precedence](../architecture/configuration-and-storage.md).
+Only one host may use a component directory/configuration at a time.
 
-### Making a release
+## Pair and administer clients
 
-Edit the independent track versions in `releases.toml`, run
-`python3 scripts/releases/sync-versions.py`, and commit the synchronized files.
-After branch validation, merge to main and wait for that exact commit's **Build
-Validation** to pass. Manually dispatch **Publish release** on main and select the
-desired suite/client/container tracks. Main pushes and Git tags do not publish.
-See the [release guide](../development/publishing.md) for pinning, checks, retries
-and prerelease/plugin rules. Successful tracks remain published if another fails.
+In a second terminal, use the same host executable and storage selection:
 
-## Building the host without Docker
-
-Requires Rust (the pinned toolchain installs automatically through `rustup`).
-
-```bash
-cd rust
-cargo test --workspace --locked
-cargo build --release --locked -p kausway-host --bins
-./target/release/kausway-host doctor --data-dir ./kausway-data --origin http://127.0.0.1:8096
-./target/release/kausway-host serve --data-dir ./kausway-data --origin http://127.0.0.1:8096
+```sh
+./kausway-host invite --label 'My phone'
+./kausway-host devices
 ```
 
-With the host running, in a second terminal:
+If you supplied custom paths, repeat them on these commands. Copy the entire
+one-time `kausway://invite/...` link to a client downloaded from a published
+**Client** release. Follow [the CLI walkthrough](local-testing.md) or
+[Android/Termux instructions](../android/storage.md#termux-client-test) to pair and
+start its proxy. Application login remains separate from Kausway pairing.
 
-```bash
-./target/release/kausway-host invite --data-dir ./kausway-data --label "Laptop"   # prints a kausway://invite/... link
-./target/release/kausway-host devices --data-dir ./kausway-data
-./target/release/kausway-host revoke --data-dir ./kausway-data '<endpoint-id>'
+To revoke a device:
+
+```sh
+./kausway-host revoke '<endpoint-id-from-devices>'
 ```
 
-On the device (any machine, using its own data directory):
+These commands work while `serve` is running. They share persisted host state,
+and the running host picks up changes. Invitations embed the address published
+by the running host in `endpoint-addr.json`.
 
-```bash
-./target/release/kausway-test-client pair 'kausway://invite/...'
-./target/release/kausway-test-client status                       # policy, path (direct/relay), RTT
-./target/release/kausway-test-client fetch /System/Info/Public
-./target/release/kausway-test-client fetch '/Videos/<id>/stream?static=true' --range bytes=0-1048575 -o part.bin
-./target/release/kausway-test-client proxy --listen 127.0.0.1:8097  # open http://127.0.0.1:8097 in a browser
+## Optional standalone admin
+
+Download the admin binary separately or use a suite archive, then run it in
+another terminal under the same OS account:
+
+```sh
+./kausway-admin --config /app/config/config.toml \
+  --data-dir /app/data/admin --host-data-dir /app/data/host
 ```
 
-The proxy makes the remote Jellyfin usable from a local browser, so you can test real playback, seeking, and cancellation.
+Use the same config/host directory as the host. Admin can edit settings and
+perform supported live operations, but cannot start/stop/restart this externally
+supervised host. Restart it through its owning terminal/application when required.
+See [admin setup](../operations/admin.md) and
+[host administration](../operations/host-administration.md).
 
-`invite`, `devices`, and `revoke` work while `serve` is running. They share `state.json` through `state.lock`, and the running host picks up changes within 2 seconds. The running host writes its current address to `endpoint-addr.json`, and `invite` embeds it in the link.
-
-Configuration (flags or environment):
+## Configuration reference
 
 | Variable | Default | Meaning |
 |---|---|---|
 | `KAUSWAY_CONFIG` | Platform config file | Shared saved settings; does not relocate host state |
-| `KAUSWAY_DATA_DIR` | Platform data root + `host/` | Identity, device registry, lock file; explicit examples above choose `./kausway-data` |
+| `KAUSWAY_DATA_DIR` | Platform data root + `host/` | Identity, device registry and lock file |
 | `KAUSWAY_ORIGIN` | `http://127.0.0.1:8096` | Local HTTP service to expose |
 | `KAUSWAY_TRANSPORT_POLICY` | stored value, else `auto` | `auto`, `relay_only`, `p2p_only` |
 | `KAUSWAY_RELAY_URL` | Iroh default relays | Custom relay URL, or `none` to disable relays (LAN or testing only) |
@@ -158,35 +92,23 @@ Configuration (flags or environment):
 | `KAUSWAY_CONTROL_ALLOW_REMOTE` | unset | Required to listen on a non-loopback address |
 | `KAUSWAY_CONTROL_TOKEN` | generated `control.token` | Fixed control token (32+ characters) instead of the file |
 
-The plugin reads `JELLYFIN_KAUSWAY_CONTROL_URL`, `JELLYFIN_KAUSWAY_CONTROL_TOKEN_FILE` and `JELLYFIN_KAUSWAY_CONTROL_TOKEN`; these override the plugin's saved settings. The Docker image sets the first two.
-
 CLI flags take precedence over environment, saved shared settings and defaults.
 See [platform storage and precedence](../architecture/configuration-and-storage.md).
 
-## Security notes
+## Security and persistence
 
 - The data directory holds the host's private key (`identity.key`). It is created with owner-only permissions on Unix. Back it up: if it is lost, every device must pair again.
 - Invitation tokens are stored only as SHA-256 digests. They are single use and expire. Failed attempts are rate limited, and the limit is saved across restarts.
 - `relay_only` and `p2p_only` are **best-effort**, not guaranteed. See [transport policies](../architecture/transport-policies.md).
-- The control API token grants full control of pairing. It lives in `control.token` (owner-only) and never reaches the browser: the dashboard page calls the plugin, which requires a Jellyfin administrator and forwards a fixed set of operations.
+- The control API token grants full control of pairing. It lives in `control.token` (owner-only). Admin and server integrations must keep it out of browser responses.
 
-## License
+Keep configuration and identity/pairing state across updates. Stop the old host
+before replacing its executable. Ctrl-C stops a terminal host cleanly; restart
+with the same storage selection to retain its identity and paired devices.
 
-MIT OR Apache-2.0
+## Other integrations and development
 
-## Android client SDK
-
-The embeddable client engine in `rust/crates/kausway-client` is shared by the existing
-CLI and the Android SDK. See [Android SDK integration](../android/README.md) for
-AAR installation, typed Kotlin APIs, security, lifecycle and media compatibility,
-and [implementation plan](../history/android-implementation-plan.md) for architecture.
-The separate **Android SDK** workflow builds the AAR and independent sample.
-
-### Coordinated releases
-
-The client engine, CLI and Android SDK share the **client** release track; suite
-and container versions can differ. A client release includes the versioned AAR,
-POM, sources, notices, README and checksums on GitHub; Maven Central is not required.
-Build Validation requires the reusable SDK workflow's emulator tests before
-assembling the client candidate. See [versioning](../development/versioning.md)
-and [manual publication](../development/publishing.md).
+See [Jellyfin integration](../integrations/jellyfin.md) for the plugin and combined
+Jellyfin/host image, or [Android SDK integration](../android/README.md) for an app
+that embeds the client instead of launching a CLI. Source builds, tests and release
+maintenance are in [Contributing](https://github.com/Xaque8787/Kausway/blob/main/CONTRIBUTING.md).
