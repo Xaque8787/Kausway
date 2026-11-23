@@ -13,7 +13,7 @@ import zipfile
 from packages import assemble, digest
 from publisher import Publisher
 from release_policy import (WORKFLOW, check_advancement, latest_validation, publication_context,
-                            release_state, verify_summary)
+                            release_state, suite_latest_eligible, verify_summary)
 from remote import APIError, GitHub, SafeRedirect, unzip
 import test_packages
 from versions import ROOT
@@ -45,6 +45,7 @@ class FakeGitHub:
         self.runs = [trusted_run()]
         self.ancestor, self.main = True, SHA
         self.history = [{'tag_name': 'v0.4.0', 'draft': False, 'prerelease': False}]
+        self.latest = {**self.history[0], 'id': 1}
         self.fail_upload = None
         self.hide_drafts_by_tag = False
         self.job = {'name': 'Validation summary', 'head_sha': SHA, 'run_id': 11, 'status': 'completed',
@@ -73,9 +74,16 @@ class FakeGitHub:
             release = {**payload, 'id': 40 + len(self.releases), 'assets': []}
             self.releases[payload['tag_name']] = release
             return copy.deepcopy(release)
+        if tail == '/releases/latest':
+            return copy.deepcopy(self.latest)
+        if tail.startswith('/releases/') and tail.split('/')[-1].isdigit() and method == 'GET':
+            release = next((item for item in self.releases.values() if item['id'] == int(tail.split('/')[-1])), None)
+            return copy.deepcopy(release)
         if tail.startswith('/releases/') and method == 'PATCH':
             release = next(item for item in self.releases.values() if item['id'] == int(tail.split('/')[-1]))
             release.update(payload)
+            if payload.get('make_latest') == 'true':
+                self.latest = copy.deepcopy(release)
             return copy.deepcopy(release)
         if tail == '/check-runs/9':
             return {'head_sha': SHA, 'app': {'slug': 'github-actions'}, 'status': 'completed', 'conclusion': 'success'}
@@ -177,9 +185,24 @@ class PolicyTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             release_state(None, 'b' * 40, SHA, '0.5.0')
 
+    def test_only_newest_stable_suite_is_eligible_for_repository_latest(self):
+        history = [{'tag_name': name, 'draft': False} for name in
+                   ['v0.4.0', 'client-v9.0.0', 'container-v8.0.0', 'suite-v0.6.0-rc.1']]
+        self.assertTrue(suite_latest_eligible('suite', '0.5.0', history))
+        for track, version in [('client', '9.0.0'), ('container', '8.0.0'), ('suite', '0.6.0-rc.1')]:
+            self.assertFalse(suite_latest_eligible(track, version, history))
+        history.append({'tag_name': 'suite-v0.6.0', 'draft': False})
+        self.assertFalse(suite_latest_eligible('suite', '0.5.0', history))
+
 
 class PublisherTests(unittest.TestCase):
     def setUp(self):
+        sleep = patch('remote.time.sleep')
+        self.sleep = sleep.start()
+        self.addCleanup(sleep.stop)
+        log = patch('remote.logger.warning')
+        log.start()
+        self.addCleanup(log.stop)
         self.env = patch.dict(os.environ, {'GITHUB_RUN_ID': '90', 'GITHUB_REPOSITORY': REPO,
                                           'GITHUB_STEP_SUMMARY': '', 'GITHUB_OUTPUT': ''})
         self.env.start()
@@ -228,10 +251,213 @@ class PublisherTests(unittest.TestCase):
         plan = self.plan()
         self.assertEqual(self.publisher.publish_directory(plan, 'suite', self.directory), 'published')
         self.assertFalse(self.api.releases['suite-v0.5.0']['draft'])
+        self.assertEqual(self.api.latest['tag_name'], 'suite-v0.5.0')
         self.assertEqual(set(self.api.uploads), {path.name for path in self.directory.iterdir()})
         writes, uploads = len(self.api.writes), len(self.api.uploads)
         self.assertEqual(self.publisher.publish_directory(plan, 'suite', self.directory), 'already complete')
         self.assertEqual((len(self.api.writes), len(self.api.uploads)), (writes, uploads))
+
+    def test_new_drafts_publish_even_when_tag_lookup_and_listing_cannot_see_them(self):
+        client = self.root / 'client'
+        assemble(self.inputs, client, 'client', self.versions, SHA, '11', 1)
+        self.api.add_artifact(f'release-candidate-client-{SHA}-run11-attempt1',
+                              {path.name: path.read_bytes() for path in client.iterdir()})
+        plan = self.publisher.preflight(SHA, ['suite', 'client'])
+        self.api.hide_drafts_by_tag = True
+        original = self.api.pages
+        def pages(path, key=None):
+            result = original(path, key)
+            return [item for item in result if not item['draft']] if path == self.api.prefix + '/releases' else result
+        with patch.object(self.api, 'pages', side_effect=pages):
+            for track, directory in [('suite', self.directory), ('client', client)]:
+                self.assertEqual(self.publisher.publish_directory(plan, track, directory), 'published')
+        self.assertEqual(self.api.latest['tag_name'], 'suite-v0.5.0')
+
+    def test_new_release_id_and_tag_visibility_are_polled_within_the_same_job(self):
+        plan = self.plan()
+        original = self.api.call
+        counter = {'release': 2, 'tag': 2}
+        def call(path, method='GET', payload=None, missing=False):
+            tail = path.removeprefix(self.api.prefix)
+            kind = ('release' if tail.startswith('/releases/') and tail.split('/')[-1].isdigit()
+                    else 'tag' if tail.startswith('/git/ref/tags/') and self.api.tags else None)
+            if method == 'GET' and kind and counter[kind]:
+                counter[kind] -= 1
+                return None
+            return original(path, method, payload, missing)
+        with patch.object(self.api, 'call', side_effect=call):
+            self.assertEqual(self.publisher.publish_directory(plan, 'suite', self.directory), 'published')
+        self.assertEqual(counter, {'release': 0, 'tag': 0})
+        self.assertEqual(self.sleep.call_count, 4)
+
+    def test_visibility_timeout_stops_before_uploading_any_assets(self):
+        plan = self.plan()
+        original = self.api.call
+        def call(path, method='GET', payload=None, missing=False):
+            if method == 'GET' and path.removeprefix(self.api.prefix).startswith('/releases/') and path.split('/')[-1].isdigit():
+                return None
+            return original(path, method, payload, missing)
+        with patch.object(self.api, 'call', side_effect=call), self.assertRaisesRegex(ValueError, 'Release .*6 checks'):
+            self.publisher.publish_directory(plan, 'suite', self.directory)
+        self.assertEqual(self.sleep.call_count, 5)
+        self.assertFalse(self.api.uploads)
+        self.assertTrue(self.api.releases['suite-v0.5.0']['draft'])
+
+    def test_canonical_release_conflicts_fail_immediately_with_specific_diagnostics(self):
+        release = {'id': 40, 'tag_name': 'suite-v0.5.0', 'draft': True, 'prerelease': False, 'assets': []}
+        self.api.releases[release['tag_name']] = copy.deepcopy(release)
+        self.api.tags[release['tag_name']] = SHA
+        for field, value in [('id', 41), ('tag_name', 'client-v0.5.0'), ('draft', False), ('prerelease', True)]:
+            original = self.api.call
+            def call(path, method='GET', payload=None, missing=False):
+                if path == self.api.prefix + '/releases/40' and method == 'GET':
+                    return {**release, field: value}
+                return original(path, method, payload, missing)
+            with self.subTest(field=field), patch.object(self.api, 'call', side_effect=call), \
+                    self.assertRaisesRegex(ValueError, field + ' expected'):
+                self.publisher.checked_release(release, release['tag_name'], SHA, False, draft=True)
+        self.assertFalse(self.sleep.called)
+        self.assertFalse(self.api.writes)
+
+    def test_asset_listing_visibility_is_polled_before_full_inventory_verification(self):
+        plan = self.plan()
+        original = self.api.pages
+        hidden = 2
+        total = len(list(self.directory.iterdir()))
+        def pages(path, key=None):
+            nonlocal hidden
+            result = original(path, key)
+            if path.endswith('/assets') and len(result) == total and hidden:
+                hidden -= 1
+                return result[:-1]
+            return result
+        with patch.object(self.api, 'pages', side_effect=pages):
+            self.assertEqual(self.publisher.publish_directory(plan, 'suite', self.directory), 'published')
+        self.assertEqual(hidden, 0)
+        self.assertEqual(self.sleep.call_count, 2)
+
+    def test_verified_asset_listing_is_reused_instead_of_rediscovered_during_download(self):
+        plan = self.plan()
+        original = self.api.pages
+        total = len(list(self.directory.iterdir()))
+        visible = False
+        def pages(path, key=None):
+            nonlocal visible
+            result = original(path, key)
+            if path.endswith('/assets') and len(result) == total:
+                if visible:
+                    raise AssertionError('Verified inventory must be reused, not read again from a lagging replica')
+                visible = True
+            return result
+        with patch.object(self.api, 'pages', side_effect=pages):
+            self.assertEqual(self.publisher.publish_directory(plan, 'suite', self.directory), 'published')
+        self.assertTrue(visible)
+
+    def test_lost_metadata_write_responses_are_reconciled_without_repeating_writes(self):
+        plan = self.plan()
+        original = self.api.call
+        lost = set()
+        def call(path, method='GET', payload=None, missing=False):
+            result = original(path, method, payload, missing)
+            operation = (method, path.removeprefix(self.api.prefix), tuple(sorted((payload or {}).keys())))
+            if method != 'GET' and operation not in lost:
+                lost.add(operation)
+                raise APIError(503, 'fixture lost response after successful write')
+            return result
+        with patch.object(self.api, 'call', side_effect=call):
+            self.assertEqual(self.publisher.publish_directory(plan, 'suite', self.directory), 'published')
+        self.assertEqual(len(lost), 4)
+        self.assertEqual(len(self.api.writes), 4)
+        self.assertEqual(self.api.latest['tag_name'], 'suite-v0.5.0')
+
+    def test_lost_upload_response_reuses_the_verified_asset_without_duplicate_post(self):
+        plan = self.plan()
+        original = self.api.upload
+        lost = False
+        def upload(release, path):
+            nonlocal lost
+            result = original(release, path)
+            if not lost:
+                lost = True
+                raise APIError(503, 'fixture lost upload response after success')
+            return result
+        with patch.object(self.api, 'upload', side_effect=upload):
+            self.assertEqual(self.publisher.publish_directory(plan, 'suite', self.directory), 'published')
+        self.assertEqual(len(self.api.uploads), len(set(self.api.uploads)))
+
+    def test_unconfirmed_upload_is_not_blindly_posted_again(self):
+        plan = self.plan()
+        self.api.fail_upload = 0
+        with patch.object(self.api, 'upload', wraps=self.api.upload) as upload, self.assertRaises(APIError):
+            self.publisher.publish_directory(plan, 'suite', self.directory)
+        self.assertEqual(upload.call_count, 1)
+        self.assertFalse(self.api.uploads)
+        self.assertTrue(self.api.releases['suite-v0.5.0']['draft'])
+
+    def test_older_completed_suite_rerun_never_moves_repository_latest_backwards(self):
+        plan = self.plan()
+        self.publisher.publish_directory(plan, 'suite', self.directory)
+        newer = {'id': 99, 'tag_name': 'suite-v0.6.0', 'draft': False, 'prerelease': False}
+        self.api.history.append(newer)
+        self.api.latest = newer.copy()
+        writes = len(self.api.writes)
+        self.assertEqual(self.publisher.publish_directory(plan, 'suite', self.directory), 'already complete')
+        self.assertEqual(self.api.latest['id'], 99)
+        self.assertEqual(len(self.api.writes), writes)
+        # A newer Latest observation also wins when the history listing lags.
+        self.api.history.pop()
+        self.publisher.publish_directory(plan, 'suite', self.directory)
+        self.assertEqual(self.api.latest['id'], 99)
+        self.assertEqual(len(self.api.writes), writes)
+
+    def test_latest_read_after_promotion_can_lag_without_failing_the_job(self):
+        plan = self.plan()
+        original = self.api.call
+        old = self.api.latest.copy()
+        hidden = 2
+        def call(path, method='GET', payload=None, missing=False):
+            nonlocal hidden
+            if path == self.api.prefix + '/releases/latest' and self.api.latest['tag_name'] == 'suite-v0.5.0' and hidden:
+                hidden -= 1
+                return old
+            return original(path, method, payload, missing)
+        with patch.object(self.api, 'call', side_effect=call):
+            self.assertEqual(self.publisher.publish_directory(plan, 'suite', self.directory), 'published')
+        self.assertEqual(hidden, 0)
+        self.assertEqual(self.sleep.call_count, 2)
+
+    def test_prerelease_suite_publishes_without_claiming_latest(self):
+        fixture = test_packages.PackageTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        self.versions['suite']['version'] = '0.5.0-rc.1'
+        fixture.release = copy.deepcopy(self.versions)
+        fixture.ci.update(repository=REPO, ref='refs/heads/main')
+        fixture.fixtures()
+        directory = self.root / 'prerelease'
+        assemble(fixture.inputs, directory, 'suite', self.versions, SHA, '11', 1)
+        self.api.artifacts = self.api.artifacts[:1]
+        self.api.add_artifact(f'release-candidate-suite-{SHA}-run11-attempt1',
+                              {path.name: path.read_bytes() for path in directory.iterdir()})
+        self.assertEqual(self.publisher.publish_directory(self.plan(), 'suite', directory), 'published')
+        self.assertTrue(self.api.releases['suite-v0.5.0-rc.1']['prerelease'])
+        self.assertEqual(self.api.latest['tag_name'], 'v0.4.0')
+        self.assertFalse(any('Jellyfin' in name for name in self.api.uploads))
+
+    def test_latest_promotion_failure_can_be_repaired_without_republishing_assets(self):
+        plan = self.plan()
+        original = self.api.call
+        def call(path, method='GET', payload=None, missing=False):
+            if method == 'PATCH' and payload == {'make_latest': 'true'}:
+                raise APIError(503, 'fixture latest update failed')
+            return original(path, method, payload, missing)
+        with patch.object(self.api, 'call', side_effect=call), self.assertRaises(APIError):
+            self.publisher.publish_directory(plan, 'suite', self.directory)
+        self.assertFalse(self.api.releases['suite-v0.5.0']['draft'])
+        uploads = self.api.uploads.copy()
+        self.assertEqual(self.publisher.publish_directory(plan, 'suite', self.directory), 'already complete')
+        self.assertEqual(self.api.uploads, uploads)
+        self.assertEqual(self.api.latest['tag_name'], 'suite-v0.5.0')
 
     def test_interrupted_draft_reuses_identical_assets_without_overwrite(self):
         plan = self.plan()
@@ -263,6 +489,7 @@ class PublisherTests(unittest.TestCase):
         self.publisher.publish_directory(plan, 'client', client)
         self.assertEqual(self.api.releases['suite-v0.5.0']['assets'], suite_assets)
         self.assertFalse(self.api.releases['client-v0.6.0']['draft'])
+        self.assertEqual(self.api.latest['tag_name'], 'suite-v0.5.0')
 
     def test_conflicting_draft_asset_and_tag_fail_without_overwrite(self):
         plan = self.plan()
@@ -323,6 +550,14 @@ class PublisherTests(unittest.TestCase):
 
 
 class RemoteBoundaryTests(unittest.TestCase):
+    def setUp(self):
+        sleep = patch('remote.time.sleep')
+        self.sleep = sleep.start()
+        self.addCleanup(sleep.stop)
+        log = patch('remote.logger.warning')
+        log.start()
+        self.addCleanup(log.stop)
+
     def download_response(self, path, expected_accept, payload):
         # Exercise the real GitHub downloader and Request construction. Only the
         # network opener is replaced; a wrong media type reproduces GitHub's 415.
@@ -360,6 +595,87 @@ class RemoteBoundaryTests(unittest.TestCase):
         payload = b'\x00release-file\xff'
         actual = self.download_response('/releases/assets/456', 'application/octet-stream', payload)
         self.assertEqual(actual, payload)
+
+    def response(self, data=b'fixture'):
+        response = io.BytesIO(data)
+        response.headers = {}
+        return response
+
+    def test_transient_reads_retry_without_leaking_query_or_credentials(self):
+        import urllib.error
+        from remote import request
+        url = 'https://api.github.com/repos/owner/project/releases?private=sensitive-query'
+        opener = unittest.mock.Mock()
+        opener.open.side_effect = [urllib.error.HTTPError(url, 503, '', {}, None),
+                                   urllib.error.URLError('connection reset'), self.response()]
+        with patch('urllib.request.build_opener', return_value=opener):
+            self.assertEqual(request(url)[0], b'fixture')
+        self.assertEqual(opener.open.call_count, 3)
+        self.assertEqual(self.sleep.call_args_list, [unittest.mock.call(1), unittest.mock.call(2)])
+
+    def test_read_retry_exhaustion_is_bounded_and_reports_safe_api_path(self):
+        import urllib.error
+        from remote import request
+        url = 'https://api.github.com/repos/owner/project/releases?private=sensitive-query'
+        opener = unittest.mock.Mock()
+        opener.open.side_effect = urllib.error.HTTPError(url, 503, '', {}, None)
+        with patch('urllib.request.build_opener', return_value=opener), self.assertRaises(APIError) as caught:
+            request(url)
+        self.assertIn('GET api.github.com/repos/owner/project/releases: HTTP 503', str(caught.exception))
+        self.assertNotIn('sensitive-query', str(caught.exception))
+        self.assertEqual(opener.open.call_count, 4)
+        self.assertEqual(self.sleep.call_count, 3)
+
+    def test_known_artifact_download_retries_temporary_404(self):
+        import urllib.error
+        opener = unittest.mock.Mock()
+        opener.open.side_effect = [urllib.error.HTTPError('https://api.github.com/path', 404, '', {}, None), self.response()]
+        with tempfile.TemporaryDirectory() as folder, patch('urllib.request.build_opener', return_value=opener):
+            destination = Path(folder) / 'artifact.zip'
+            GitHub(REPO, 'fixture').download('/repos/' + REPO + '/actions/artifacts/123/zip', destination)
+            self.assertEqual(destination.read_bytes(), b'fixture')
+        self.assertEqual(opener.open.call_count, 2)
+
+    def test_auth_media_errors_and_write_failures_are_not_blindly_retried(self):
+        import urllib.error
+        from remote import request
+        for method, code in [('GET', 401), ('GET', 403), ('GET', 415), ('POST', 503), ('PUT', 503), ('PATCH', 503)]:
+            opener = unittest.mock.Mock()
+            opener.open.side_effect = urllib.error.HTTPError('https://api.github.com/path', code, '', {}, None)
+            with self.subTest(method=method, code=code), patch('urllib.request.build_opener', return_value=opener), \
+                    self.assertRaises(APIError):
+                request('https://api.github.com/path', method)
+            self.assertEqual(opener.open.call_count, 1)
+        self.assertFalse(self.sleep.called)
+
+    def test_retry_after_is_respected_without_exceeding_the_wait_bound(self):
+        import urllib.error
+        from remote import request
+        opener = unittest.mock.Mock()
+        opener.open.side_effect = [urllib.error.HTTPError('https://api.github.com/path', 429, '', {'Retry-After': '7'}, None),
+                                   self.response()]
+        with patch('urllib.request.build_opener', return_value=opener):
+            request('https://api.github.com/path')
+        self.sleep.assert_called_once_with(7)
+        self.sleep.reset_mock()
+        opener.open.reset_mock()
+        opener.open.side_effect = urllib.error.HTTPError('https://api.github.com/path', 429, '', {'Retry-After': '60'}, None)
+        with patch('urllib.request.build_opener', return_value=opener), self.assertRaises(APIError):
+            request('https://api.github.com/path')
+        self.assertEqual(opener.open.call_count, 1)
+        self.assertFalse(self.sleep.called)
+
+    def test_network_write_failure_masks_signed_url_and_does_not_repeat_the_write(self):
+        import urllib.error
+        from remote import TransportError, request
+        opener = unittest.mock.Mock()
+        url = 'https://ghcr.io/upload/private-session?token=sensitive-query'
+        opener.open.side_effect = urllib.error.URLError(url)
+        with patch('urllib.request.build_opener', return_value=opener), self.assertRaises(TransportError) as caught:
+            request(url, 'PUT', b'fixture')
+        self.assertEqual(str(caught.exception), 'PUT ghcr.io: network request failed')
+        self.assertEqual(opener.open.call_count, 1)
+        self.assertFalse(self.sleep.called)
 
     def test_artifact_zip_traversal_is_rejected(self):
         with tempfile.TemporaryDirectory() as folder:

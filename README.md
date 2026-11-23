@@ -5,6 +5,19 @@ peer-to-peer connections, without port forwarding. A standalone Rust host forwar
 requests to a configured origin; client applications use the shared client engine
 through the Android SDK or development CLI. Jellyfin is the reference server integration.
 
+## Stable downloads
+
+| Distribution | Release |
+| --- | --- |
+| Manager, host, admin and Jellyfin plugin | [Suite 0.5.0](https://github.com/Xaque8787/Kausway/releases/tag/suite-v0.5.0) |
+| CLI client and Android SDK | [Client 0.5.0](https://github.com/Xaque8787/Kausway/releases/tag/client-v0.5.0) |
+| AMD64/ARM64 suite image and digest record | [Container 0.1.0](https://github.com/Xaque8787/Kausway/releases/tag/container-v0.1.0) |
+
+GitHub's repository-wide **Latest release** belongs to the newest stable suite.
+Client downloads have their own release page. The separate image tag
+`ghcr.io/xaque8787/kausway:latest` follows stable container releases. Older releases,
+including `v0.4.0`, remain available with their original assets.
+
 ## Start here
 
 - [Install and run the suite](docs/getting-started/suite.md): select a download, start manager/admin, configure a server and pair a client.

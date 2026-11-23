@@ -79,6 +79,15 @@ distribute its plugin. Jellyfin's numeric four-part version cannot distinguish
 that prerelease from `0.5.0`. Stable suite releases require the plugin asset.
 Client and container prereleases have their own independent classifications.
 
+GitHub has one repository-wide **Latest release**, which belongs to the newest
+stable **suite**. After publishing and verifying a suite, the publisher promotes
+that release's metadata and confirms the Latest lookup. Client/container releases
+and all prereleases never claim the label. Older completed suite reruns cannot
+move it backwards; a failed Latest promotion can be repaired without replacing
+assets or moving tags. `/releases/latest` therefore locates suite downloads, not
+the client SDK. Use explicit client release links; the README lists all three tracks.
+The legacy `v0.4.0` release is preserved rather than deleted to change this label.
+
 The container publisher downloads and verifies the selected published suite's
 complete release inventory. Native AMD64 and ARM64 jobs copy its exact three Linux
 binaries and notices into the runtime image. Suite and container source commits
@@ -139,7 +148,29 @@ Publication distinguishes **not published**, **incomplete**, and **complete**:
   the validated candidate. Identical assets are retained; missing assets are added.
   Unexpected, unfinished or conflicting assets stop the run for inspection.
 - A complete release is verified and reported as already complete. Its assets and
-  immutable Git/image tags are never silently replaced.
+  immutable Git/image tags are never silently replaced. Latest-label metadata may
+  be repaired for the newest stable suite without republishing those assets.
+
+The publisher verifies known drafts through `/releases/<id>`, checking release ID,
+tag, prerelease/draft state and source commit. It does not repeatedly discover a
+new draft through tag lookup or release listing during uploads. Expected missing
+records (including a freshly created tag or uploaded inventory) get six visibility
+checks with 1/2/4/8/16-second backoff between checks. Genuine identity/state/hash
+conflicts fail immediately with specific expected/observed diagnostics.
+
+GET/HEAD requests retry transient network errors and HTTP 429/500/502/503/504 up to
+three times with bounded backoff. Known download IDs also retry temporary 404s;
+ordinary absence lookups still return missing normally. Short numeric `Retry-After`
+instructions are honored; waits above 30 seconds are not retried automatically.
+Repository API reads request cache revalidation. Errors show safe repository API
+paths, never credentials, response bodies or signed storage/upload URLs.
+
+POST/PUT/PATCH requests are not blindly repeated. After a transient error on a
+release write, the publisher polls its expected result: an existing tag/draft,
+the actual uploaded asset and hash, or published/Latest state. A confirmed result
+continues the same job without another write. An unconfirmed write, persistent
+outage, authentication failure or conflicting record still stops safely; no
+pipeline can guarantee success during every external-service failure.
 
 Prefer **Re-run failed jobs** on the original publisher run, preserving its plan,
 selected source and platform receipts. Platform receipt artifacts survive separate
@@ -160,6 +191,13 @@ run fails visibly. Rerunning verifies the existing release/index/tags and repair
 the pointer without rebuilding. Rerunning an older completed version after a newer
 stable release does not move `latest` backward. Suite/client do not roll back when
 another track fails.
+
+Publisher-only maintenance can be merged to main after normal validation with no
+product-version bump or publishing run. It applies to future manual releases.
+Already published `0.5.0` suite/client assets and container `0.1.0` do not need
+republishing for these improvements. Keep their tags bound to their original
+commit; dispatching the same versions from a newer main commit is not an upgrade
+or a way to apply workflow-only changes to existing releases.
 
 ## A defective published release
 

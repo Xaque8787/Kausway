@@ -207,6 +207,18 @@ class ContainerPublisherTests(unittest.TestCase):
         self.assertEqual(self.registry.manifest('latest')['digest'], value)
         self.assertFalse(self.api.releases['container-v0.2.0']['draft'])
 
+    def test_container_publication_uses_canonical_draft_id_when_tag_lookup_lags(self):
+        self.api.hide_drafts_by_tag = True
+        original = self.api.pages
+        def pages(path, key=None):
+            result = original(path, key)
+            return [item for item in result if not item['draft']] if path == self.api.prefix + '/releases' else result
+        with patch.object(self.api, 'pages', side_effect=pages):
+            self.run_container()
+        self.assertFalse(self.api.releases['container-v0.2.0']['draft'])
+        self.assertEqual(self.registry.manifest('latest')['digest'], self.registry.manifest('0.2.0')['digest'])
+        self.assertEqual(self.api.latest['tag_name'], 'suite-v0.5.0')
+
     def test_registry_conflict_and_untrusted_receipts_prevent_promotion(self):
         record = self.records / 'platform-amd64.json'
         data = json.loads(record.read_text())

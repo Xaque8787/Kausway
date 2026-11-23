@@ -1,9 +1,12 @@
 """Small GitHub/OCI HTTP boundary. Importing this module performs no requests."""
 import base64
 import hashlib
+import http.client
 import json
+import logging
 from pathlib import PurePosixPath
 import re
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -14,6 +17,55 @@ class APIError(RuntimeError):
     def __init__(self, status, operation):
         super().__init__(f'{operation}: HTTP {status}')
         self.status = status
+
+
+class TransportError(RuntimeError):
+    """A request failed without revealing credentials or signed upload URLs."""
+
+
+class VisibilityError(ValueError):
+    """An expected remote record did not appear within the bounded wait."""
+
+
+logger = logging.getLogger(__name__)
+TRANSIENT_HTTP = {429, 500, 502, 503, 504}
+READ_DELAYS = (1, 2, 4)
+VISIBILITY_DELAYS = (1, 2, 4, 8, 16)
+
+
+def transient(error):
+    return isinstance(error, TransportError) or isinstance(error, APIError) and error.status in TRANSIENT_HTTP
+
+
+def wait_visible(read, description):
+    """Poll an expected record; conflicts raised by read are never retried."""
+    for attempt in range(len(VISIBILITY_DELAYS) + 1):
+        value = read()
+        if value is not None:
+            return value
+        if attempt == len(VISIBILITY_DELAYS):
+            break
+        delay = VISIBILITY_DELAYS[attempt]
+        logger.warning('%s not visible yet; retrying in %ss (%s/%s)',
+                       description, delay, attempt + 1, len(VISIBILITY_DELAYS))
+        time.sleep(delay)
+    raise VisibilityError(f'{description} remained unavailable after {len(VISIBILITY_DELAYS) + 1} checks; stop and inspect')
+
+
+def observed_write(write, read, description):
+    """Reconcile an uncertain write through its postcondition; never blindly repeat it."""
+    try:
+        return write()
+    except (APIError, TransportError) as error:
+        if not transient(error):
+            raise
+        logger.warning('%s returned %s; checking whether it completed before doing anything else', description, error)
+        try:
+            return wait_visible(read, description + ' result')
+        except VisibilityError:
+            # Preserve the original failed write when its outcome cannot be
+            # confirmed. An operator can resume; a second POST is not safe yet.
+            raise error from None
 
 
 class SafeRedirect(urllib.request.HTTPRedirectHandler):
@@ -27,16 +79,38 @@ class SafeRedirect(urllib.request.HTTPRedirectHandler):
         return redirected
 
 
-def request(url, method='GET', data=None, headers=None, missing=False):
+def request(url, method='GET', data=None, headers=None, missing=False, retry_missing=False):
     req = urllib.request.Request(url, method=method, data=data, headers=headers or {})
-    try:
-        with urllib.request.build_opener(SafeRedirect()).open(req, timeout=120) as response:
-            return response.read(), dict(response.headers)
-    except urllib.error.HTTPError as error:
-        if missing and error.code == 404:
-            return None, {}
-        # Never print upload-session URLs, response bodies, or credentials.
-        raise APIError(error.code, method + ' ' + urllib.parse.urlparse(url).hostname) from None
+    parsed = urllib.parse.urlparse(url)
+    # Only GitHub repository API paths are safe to show. Signed storage/upload
+    # locations retain just their hostname, never their path/query or headers.
+    endpoint = parsed.hostname + (parsed.path if parsed.hostname == 'api.github.com' and parsed.path.startswith('/repos/') else '')
+    operation = method + ' ' + endpoint
+    readable = method in ('GET', 'HEAD')
+    for attempt in range(len(READ_DELAYS) + 1):
+        try:
+            with urllib.request.build_opener(SafeRedirect()).open(req, timeout=120) as response:
+                return response.read(), dict(response.headers)
+        except urllib.error.HTTPError as error:
+            if missing and error.code == 404:
+                return None, {}
+            retry = error.code in TRANSIENT_HTTP or retry_missing and error.code == 404
+            if not readable or not retry or attempt == len(READ_DELAYS):
+                raise APIError(error.code, operation) from None
+            delay = READ_DELAYS[attempt]
+            hint = error.headers.get('Retry-After') if error.headers else None
+            if hint is not None:
+                # Do not retry earlier than instructed or exceed the bounded wait.
+                if not hint.isdigit() or int(hint) > 30:
+                    raise APIError(error.code, operation) from None
+                delay = max(delay, int(hint))
+            logger.warning('%s: HTTP %s; retrying read in %ss', operation, error.code, delay)
+        except (urllib.error.URLError, TimeoutError, ConnectionError, http.client.IncompleteRead):
+            if not readable or attempt == len(READ_DELAYS):
+                raise TransportError(operation + ': network request failed') from None
+            delay = READ_DELAYS[attempt]
+            logger.warning('%s: network request failed; retrying read in %ss', operation, delay)
+        time.sleep(delay)
 
 
 def unzip(download, destination):
@@ -66,7 +140,8 @@ class GitHub:
         data, _ = request('https://api.github.com' + path, method,
                           None if payload is None else json.dumps(payload).encode(),
                           {'Authorization': 'Bearer ' + self.token, 'Accept': 'application/vnd.github+json',
-                           'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json'}, missing)
+                           'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json',
+                           'Cache-Control': 'no-cache'}, missing)
         return None if data is None else json.loads(data)
 
     def pages(self, path, key=None):
@@ -89,7 +164,7 @@ class GitHub:
                   else 'application/vnd.github+json')
         data, _ = request('https://api.github.com' + path,
                           headers={'Authorization': 'Bearer ' + self.token, 'Accept': accept,
-                                   'X-GitHub-Api-Version': '2022-11-28'})
+                                   'X-GitHub-Api-Version': '2022-11-28'}, retry_missing=True)
         destination.write_bytes(data)
 
     def upload(self, release, path):

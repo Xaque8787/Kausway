@@ -57,6 +57,18 @@ def check_advancement(track, version, releases, complete=False):
         raise ValueError(f'{track} {version} does not advance published history; bump releases.toml and synchronize')
 
 
+def suite_latest_eligible(track, version, releases):
+    """GitHub has one Latest label; only the newest stable suite may own it."""
+    current = parse_version(version)
+    if track != 'suite' or current.prerelease is not None:
+        return False
+    for release in releases:
+        previous = history_version(release['tag_name'], 'suite')
+        if not release['draft'] and previous is not None and previous.prerelease is None and previous > current:
+            return False
+    return True
+
+
 def release_state(release, tag_commit, commit, version):
     if tag_commit is not None and tag_commit != commit:
         raise ValueError('Existing release tag points to another commit; never overwrite it')
