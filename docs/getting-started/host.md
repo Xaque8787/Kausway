@@ -34,6 +34,20 @@ How the image works:
 - The plugin talks to `kausway-host` only through control API v1 on `127.0.0.1:47950` inside the container. That port is not published. The token is read from `deploy/jellyfin/kausway-data/control.token`.
 - Folders next to `compose.yaml`: `deploy/jellyfin/config`, `deploy/jellyfin/cache`, `deploy/jellyfin/media` (mounted read-only at `/media`; add it as a library), `./kausway-data`.
 
+The image sets `KAUSWAY_CONFIG=/kausway-data/config.toml` and
+`KAUSWAY_DATA_DIR=/kausway-data`. The existing `./kausway-data:/kausway-data`
+bind mount therefore persists the shared Kausway configuration as well as host
+identity, pairings and state. These defaults also apply with `docker run` when
+that directory is mounted. Compose can override them for a custom layout.
+
+Earlier combined images used the host's platform default for its shared config,
+normally `/root/.config/kausway/config.toml`. An existing file is not automatically
+moved. Before replacing an old container, stop the processes and copy that file
+to the persisted location if you need its saved settings, preserving private
+permissions and checking for an existing destination. Alternatively, explicitly
+select and persist a custom config path. Existing `/kausway-data` identity and
+pairing files remain at the same locations.
+
 To update an existing installation after pulling repository changes:
 
 ```sh

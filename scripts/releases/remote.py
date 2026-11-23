@@ -83,8 +83,12 @@ class GitHub:
     def download(self, path, destination):
         if not path.startswith(self.prefix + '/'):
             raise ValueError('Unexpected download API path')
+        # Actions artifact downloads use the JSON API media type before redirecting
+        # to the ZIP. Release assets need octet-stream to return file bytes.
+        accept = ('application/octet-stream' if path.startswith(self.prefix + '/releases/assets/')
+                  else 'application/vnd.github+json')
         data, _ = request('https://api.github.com' + path,
-                          headers={'Authorization': 'Bearer ' + self.token, 'Accept': 'application/octet-stream',
+                          headers={'Authorization': 'Bearer ' + self.token, 'Accept': accept,
                                    'X-GitHub-Api-Version': '2022-11-28'})
         destination.write_bytes(data)
 

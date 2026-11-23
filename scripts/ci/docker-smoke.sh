@@ -69,6 +69,8 @@ for _ in $(seq 1 30); do
   sleep 1
 done
 echo
+# The image-selected shared config must land in the persisted host-data bind mount.
+in_container 'test -s /kausway-data/config.toml'
 # The data directory is private to the container's user, so check the token from inside.
 in_container 'test "$(stat -c %a /kausway-data/control.token)" = 600'
 in_container 'curl -fs -H "Authorization: Bearer $(cat /kausway-data/control.token)" http://127.0.0.1:47950/v1/status' > "$work/status.json"

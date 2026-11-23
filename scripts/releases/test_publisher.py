@@ -14,7 +14,7 @@ from packages import assemble, digest
 from publisher import Publisher
 from release_policy import (WORKFLOW, check_advancement, latest_validation, publication_context,
                             release_state, verify_summary)
-from remote import APIError, SafeRedirect, unzip
+from remote import APIError, GitHub, SafeRedirect, unzip
 import test_packages
 from versions import ROOT
 
@@ -323,6 +323,44 @@ class PublisherTests(unittest.TestCase):
 
 
 class RemoteBoundaryTests(unittest.TestCase):
+    def download_response(self, path, expected_accept, payload):
+        # Exercise the real GitHub downloader and Request construction. Only the
+        # network opener is replaced; a wrong media type reproduces GitHub's 415.
+        import urllib.error
+
+        def open_request(request, timeout):
+            if request.get_header('Accept') != expected_accept:
+                raise urllib.error.HTTPError(request.full_url, 415, 'Unsupported Media Type', {}, None)
+            self.assertEqual(request.get_method(), 'GET')
+            self.assertEqual(request.get_header('Authorization'), 'Bearer fixture-token')
+            self.assertEqual(request.get_header('X-github-api-version'), '2022-11-28')
+            self.assertEqual(request.full_url, 'https://api.github.com/repos/' + REPO + path)
+            response = io.BytesIO(payload)
+            response.headers = {}
+            return response
+
+        opener = unittest.mock.Mock()
+        opener.open.side_effect = open_request
+        with tempfile.TemporaryDirectory() as folder, patch('urllib.request.build_opener', return_value=opener):
+            destination = Path(folder) / 'download'
+            GitHub(REPO, 'fixture-token').download('/repos/' + REPO + path, destination)
+            opener.open.assert_called_once()
+            return destination.read_bytes()
+
+    def test_actions_artifact_download_uses_json_accept_and_retains_zip_bytes(self):
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, 'w') as archive:
+            archive.writestr('validation-summary.json', b'{"success":true}')
+        actual = self.download_response('/actions/artifacts/123/zip', 'application/vnd.github+json', buffer.getvalue())
+        self.assertEqual(actual, buffer.getvalue())
+        with zipfile.ZipFile(io.BytesIO(actual)) as archive:
+            self.assertEqual(archive.read('validation-summary.json'), b'{"success":true}')
+
+    def test_release_asset_download_uses_octet_stream_and_retains_binary_bytes(self):
+        payload = b'\x00release-file\xff'
+        actual = self.download_response('/releases/assets/456', 'application/octet-stream', payload)
+        self.assertEqual(actual, payload)
+
     def test_artifact_zip_traversal_is_rejected(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / 'artifact.zip'

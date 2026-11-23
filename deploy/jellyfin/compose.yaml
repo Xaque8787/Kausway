@@ -1,6 +1,7 @@
 # Jellyfin + kausway-host, built from this repository: docker compose up -d --build
 # Data lives next to this file: ./config (Jellyfin), ./cache, ./media (your library, read-only),
-# ./kausway-data (Iroh identity, paired devices, control token). Back up ./config and ./kausway-data.
+# ./kausway-data (Kausway config, identity, paired devices, control token).
+# Back up ./config and ./kausway-data. The image sets KAUSWAY_CONFIG=/kausway-data/config.toml.
 name: kausway
 
 services:

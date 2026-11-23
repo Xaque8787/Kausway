@@ -38,6 +38,7 @@ COPY --from=plugin-build /out/ /opt/kausway/plugins/
 COPY deploy/jellyfin/entrypoint.sh /usr/local/bin/kausway-entrypoint
 RUN chmod 0755 /usr/local/bin/kausway-entrypoint
 ENV KAUSWAY_DATA_DIR=/kausway-data \
+    KAUSWAY_CONFIG=/kausway-data/config.toml \
     KAUSWAY_ORIGIN=http://127.0.0.1:8096 \
     KAUSWAY_CONTROL_LISTEN=127.0.0.1:47950 \
     JELLYFIN_KAUSWAY_CONTROL_URL=http://127.0.0.1:47950 \
