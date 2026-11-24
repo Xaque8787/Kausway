@@ -46,7 +46,7 @@ DOCS = ['docs/architecture/configuration-and-storage.md', 'docs/android/storage.
         'docs/operations/cli-reference.md', 'docs/operations/development-binaries.md',
         'docs/architecture/transport-policies.md', 'docs/integrations/application-suite.md',
         'docs/integrations/docker-suite.md',
-        'protocol/control-v1.md', 'protocol/transport-v1.md']
+        'protocol/control-v1.md', 'protocol/transport-v1.md', 'protocol/rendezvous-v1.md', 'docs/operations/short-code-pairing.md']
 EXAMPLES = ['examples/application-integration/README.md', 'examples/application-integration/application.py',
             'examples/application-integration/kausway.py', 'examples/docker-integration/Dockerfile',
             'examples/docker-integration/entrypoint.sh', 'examples/docker-integration/supervise.py',

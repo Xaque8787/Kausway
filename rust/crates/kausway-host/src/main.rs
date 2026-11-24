@@ -109,18 +109,51 @@ fn invite_command(args: &InviteArgs) -> Result<(), String> {
             ),
         },
     };
+    if args.short_code && !host_running {
+        return Err("short-code publication requires a running host; start kausway-host serve first, or omit --short-code for a normal invitation".into());
+    }
     let state = open_state(&args.data)?;
-    let (invitation, token) = state
-        .create_invitation(&args.label, args.ttl_secs, now_secs())
-        .map_err(|error| error.to_string())?;
-    println!("{}", InviteLink::new(addr, token).encode());
+    let (invitation, token, code) = if args.short_code {
+        let (invite, token, code) = state
+            .create_rendezvous_invitation(&args.label, args.ttl_secs, now_secs(), addr.clone())
+            .map_err(|error| error.to_string())?;
+        (invite, token, Some(code))
+    } else {
+        let (invite, token) = state
+            .create_invitation(&args.label, args.ttl_secs, now_secs())
+            .map_err(|error| error.to_string())?;
+        (invite, token, None)
+    };
+    let link = InviteLink::new(addr, token).encode();
+    if args.json || args.short_code {
+        let mut value = serde_json::json!({"id":invitation.id,"label":invitation.label,
+            "created_at":invitation.created_at,"expires_at":invitation.expires_at,"link":link});
+        if let Some(code) = code {
+            value["short_code"] = serde_json::json!(code.expose());
+            value["rendezvous"] =
+                serde_json::json!(state.rendezvous_status(&invitation.id, now_secs()));
+        }
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&value).map_err(|error| error.to_string())?
+        );
+    } else {
+        println!("{link}");
+    }
     eprintln!(
         "invitation {} for \"{}\" expires in {} minutes; address from {source}",
         invitation.id,
         invitation.label,
         invitation.expires_at.saturating_sub(invitation.created_at) / 60
     );
-    eprintln!("the link works once; treat it like a password until it is used");
+    eprintln!(
+        "the invitation works once; treat its URL and any short code like passwords until used"
+    );
+    if args.short_code {
+        eprintln!(
+            "short-code publication is asynchronous; keep the full URL as fallback and check publication status in admin"
+        );
+    }
     Ok(())
 }
 

@@ -1,5 +1,7 @@
 # Local admin account setup
 
+Development builds support optional [short-code invitations](short-code-pairing.md), with publication status and the full URL retained as fallback.
+
 `kausway-admin` contains an embedded web frontend and local authentication server.
 It provides first-run setup, sign-in/out, administrator credential changes and
 [host administration](host-administration.md), including

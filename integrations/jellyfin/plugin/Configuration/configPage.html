@@ -70,18 +70,26 @@
                                 </select>
                             </div>
                             <div>
-                                <button is="emby-button" type="submit" class="raised button-submit emby-button"><span>Create link</span></button>
+                                <button is="emby-button" type="submit" class="raised button-submit emby-button"><span>Create invitation</span></button>
                             </div>
                         </div>
+                        <label><input id="kauswayShortCode" type="checkbox" disabled /> Also generate a short code</label>
+                        <p>The URL remains available without discovery. Both inputs share one use and expiry.</p>
                     </form>
                     <div id="kauswayInviteResult" class="kausway-hidden">
                         <p>Open this link on the device you are pairing. It works once and expires <span id="kauswayInviteExpiry"></span>.</p>
                         <textarea id="kauswayInviteLink" class="kausway-link emby-input" readonly></textarea>
                         <button is="emby-button" type="button" id="kauswayCopyLink" class="raised emby-button"><span>Copy link</span></button>
+                        <div id="kauswayCodeResult" class="kausway-hidden">
+                            <label for="kauswayInviteCode">Short code — treat as a password</label>
+                            <input id="kauswayInviteCode" class="kausway-link emby-input" readonly autocomplete="off" spellcheck="false" />
+                            <button is="emby-button" type="button" id="kauswayCopyCode" class="raised emby-button"><span>Copy code</span></button>
+                            <p id="kauswayPublication" role="status"></p>
+                        </div>
                     </div>
                     <div class="kausway-scroll">
                         <table class="kausway-table" id="kauswayInvitationsTable">
-                            <thead><tr><th>Label</th><th>Expires</th><th></th></tr></thead>
+                            <thead><tr><th>Label</th><th>Expires</th><th>Short code</th><th></th></tr></thead>
                             <tbody></tbody>
                         </table>
                     </div>
@@ -180,6 +188,21 @@
                 var pluginId = '7c7a2311-48af-55e1-bc29-c41da361c57f';
                 var page = document.querySelector('#KauswayConfigPage');
                 var refreshTimer = null;
+                var activeInvitation = null;
+                function clearInvitation() {
+                    activeInvitation = null;
+                    $('#kauswayInviteLink').value = '';
+                    $('#kauswayInviteCode').value = '';
+                    $('#kauswayPublication').textContent = '';
+                    show($('#kauswayInviteResult'), false);
+                    show($('#kauswayCodeResult'), false);
+                }
+                function publicationText(inv) {
+                    if (!inv.rendezvous) { return 'URL only'; }
+                    if (inv.rendezvous.state === 'published') { return 'Publication acknowledged. Try the code, or use the full URL.'; }
+                    if (inv.rendezvous.state === 'retrying') { return 'Publication is retrying' + (inv.rendezvous.error === 'too_large' ? ': address is too large for discovery' : '') + '. Use the full URL now.'; }
+                    return 'Publishing short code… The full URL can be used now.';
+                }
 
                 function $(selector) { return page.querySelector(selector); }
 
@@ -289,6 +312,8 @@
                 function loadStatus() {
                     return request('GET', 'Status').then(function (status) {
                         renderPolicy(status.policy);
+                        $('#kauswayShortCode').disabled = !(status.rendezvous && status.rendezvous.supported);
+                        if ($('#kauswayShortCode').disabled) { $('#kauswayShortCode').checked = false; }
                         renderWebSocket(status.websocket);
                         var relay = status.relay.mode === 'disabled' ? 'Disabled' : (status.relay_connected ? 'Connected' : 'Not connected');
                         if (status.relay.mode === 'custom') { relay += ' (custom)'; }
@@ -335,12 +360,18 @@
 
                 function loadInvitations() {
                     return request('GET', 'Invitations').then(function (data) {
+                        if (activeInvitation) {
+                            var current = data.invitations.find(function (inv) { return inv.id === activeInvitation.id; });
+                            if (!current || activeInvitation.expires_at <= Date.now() / 1000) { clearInvitation(); }
+                            else { $('#kauswayPublication').textContent = publicationText(current); }
+                        }
                         fillTable('#kauswayInvitationsTable', '#kauswayInvitationsEmpty', data.invitations, function (row, inv) {
                             cell(row, inv.label);
                             cell(row, when(inv.expires_at));
+                            cell(row, publicationText(inv));
                             actionButton(row, 'Cancel', function () {
                                 request('DELETE', 'Invitations/' + encodeURIComponent(inv.id)).then(function () {
-                                    show($('#kauswayInviteResult'), false);
+                                    if (activeInvitation && activeInvitation.id === inv.id) { clearInvitation(); }
                                     return loadInvitations();
                                 }).catch(fail);
                             });
@@ -365,11 +396,13 @@
                     refreshAll().then(function () { Dashboard.hideLoadingMsg(); });
                     clearInterval(refreshTimer);
                     refreshTimer = setInterval(function () {
-                        Promise.all([loadStatus(), loadSessions()]).catch(fail);
+                        if (activeInvitation && activeInvitation.expires_at <= Date.now() / 1000) { clearInvitation(); }
+                        Promise.all([loadStatus(), loadSessions(), loadInvitations()]).catch(fail);
                     }, 5000);
                 });
 
                 page.addEventListener('pagehide', function () {
+                    clearInvitation();
                     clearInterval(refreshTimer);
                     refreshTimer = null;
                 });
@@ -377,8 +410,12 @@
                 $('#kauswayInviteForm').addEventListener('submit', function (e) {
                     e.preventDefault();
                     var label = $('#kauswayInviteLabel').value.trim();
-                    request('POST', 'Invitations', { label: label, ttl_secs: parseInt($('#kauswayInviteTtl').value, 10) })
+                    request('POST', 'Invitations', { label: label, ttl_secs: parseInt($('#kauswayInviteTtl').value, 10), short_code: $('#kauswayShortCode').checked })
                         .then(function (inv) {
+                            activeInvitation = inv;
+                            $('#kauswayInviteCode').value = inv.short_code || '';
+                            show($('#kauswayCodeResult'), !!inv.short_code);
+                            $('#kauswayPublication').textContent = publicationText(inv);
                             $('#kauswayInviteLink').value = inv.link;
                             $('#kauswayInviteExpiry').textContent = when(inv.expires_at);
                             show($('#kauswayInviteResult'), true);
@@ -388,6 +425,14 @@
                         })
                         .catch(fail);
                     return false;
+                });
+
+                $('#kauswayCopyCode').addEventListener('click', function () {
+                    var code = $('#kauswayInviteCode');
+                    if (!code.value) { return; }
+                    if (navigator.clipboard && window.isSecureContext) {
+                        navigator.clipboard.writeText(code.value).then(function () { Dashboard.alert('Short code copied.'); }).catch(fail);
+                    } else { code.select(); document.execCommand('copy'); }
                 });
 
                 $('#kauswayCopyLink').addEventListener('click', function () {

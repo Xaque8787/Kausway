@@ -5,6 +5,7 @@ use jni::{
     sys::{jlong, jstring},
 };
 use kausway_client_core::{Client, ClientConfig, Error};
+use kausway_rendezvous::backend::NetworkConfig;
 use kausway_transport::net::RelayChoice;
 use serde_json::{Value, json};
 use std::{
@@ -57,14 +58,48 @@ fn invoke(handle: i64, operation: &str, argument: &str) -> Result<Value, Error> 
             .enable_all()
             .build()
             .map_err(|e| Error::Configuration(e.to_string()))?;
-        let client = runtime.block_on(Client::new(ClientConfig {
-            data_dir: path.into(),
-            name: config["deviceName"]
-                .as_str()
-                .unwrap_or("Android client")
-                .into(),
-            relay,
-        }))?;
+        let discovery = NetworkConfig {
+            dht: config
+                .get("rendezvousDht")
+                .map(|v| {
+                    v.as_bool()
+                        .ok_or_else(|| Error::Configuration("rendezvousDht must be boolean".into()))
+                })
+                .transpose()?
+                .unwrap_or(true),
+            gateways: config
+                .get("rendezvousGateways")
+                .map(|v| {
+                    serde_json::from_value::<Vec<String>>(v.clone()).map_err(|_| {
+                        Error::Configuration("rendezvousGateways must be a URL list".into())
+                    })
+                })
+                .transpose()?
+                .unwrap_or_default(),
+            timeout: std::time::Duration::from_secs(
+                config
+                    .get("rendezvousTimeoutSeconds")
+                    .map(|v| {
+                        v.as_u64().ok_or_else(|| {
+                            Error::Configuration("rendezvousTimeoutSeconds must be positive".into())
+                        })
+                    })
+                    .transpose()?
+                    .unwrap_or(10),
+            ),
+            ..Default::default()
+        };
+        let client = runtime.block_on(Client::new_with_rendezvous(
+            ClientConfig {
+                data_dir: path.into(),
+                name: config["deviceName"]
+                    .as_str()
+                    .unwrap_or("Android client")
+                    .into(),
+                relay,
+            },
+            discovery,
+        ))?;
         let id = NEXT.fetch_add(1, Ordering::Relaxed);
         clients()
             .lock()
@@ -80,6 +115,11 @@ fn invoke(handle: i64, operation: &str, argument: &str) -> Result<Value, Error> 
         .ok_or(Error::Closed)?;
     let result = native.runtime.block_on(async {
         match operation {
+            "pairingProgress" => Ok(json!({"stage": native.client.pairing_stage()})),
+            "cancelPairing" => {
+                native.client.cancel_pairing();
+                Ok(json!({}))
+            }
             "pair" => {
                 native.client.pair(argument).await?;
                 Ok(json!({}))
@@ -161,6 +201,8 @@ mod tests {
             .unwrap();
         assert!(invoke(0, "initialize", &config).is_err());
         assert_eq!(invoke(first, "status", "").unwrap()["state"], "idle");
+        assert!(invoke(first, "pairingProgress", "").unwrap()["stage"].is_null());
+        assert_eq!(invoke(first, "cancelPairing", "").unwrap(), json!({}));
         assert!(matches!(
             invoke(first, "pair", "bad"),
             Err(Error::InvalidInvitation)

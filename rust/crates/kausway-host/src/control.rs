@@ -262,6 +262,8 @@ struct NewInvitation {
     label: String,
     #[serde(default)]
     ttl_secs: Option<u64>,
+    #[serde(default)]
+    short_code: bool,
 }
 
 #[derive(Deserialize)]
@@ -279,11 +281,11 @@ struct WebSocketChange {
 }
 
 fn parse_body<T: for<'de> Deserialize<'de>>(body: &[u8]) -> Result<T, Reply> {
-    serde_json::from_slice(body).map_err(|error| {
+    serde_json::from_slice(body).map_err(|_| {
         Reply::error(
             StatusCode::BAD_REQUEST,
             "bad_request",
-            &format!("invalid JSON body: {error}"),
+            "invalid JSON body or field type",
         )
     })
 }
@@ -315,6 +317,14 @@ pub fn route(
             "missing or wrong control token",
         );
     }
+    // CLI creation writes the shared file in another process. Invitation polling must see
+    // that transaction immediately rather than waiting for the maintenance interval.
+    if method == "GET"
+        && matches!(rest, ["invitations"] | ["invitations", _])
+        && let Err(error) = context.state.reload()
+    {
+        return Reply::state_error(error);
+    }
     let result = match (rest, method) {
         (["config"], "GET") => crate::configuration::read(context),
         (["config"], "PUT") => crate::configuration::save(context, body),
@@ -328,6 +338,7 @@ pub fn route(
         (["devices", id], "DELETE") => revoke(context, id),
         (["invitations"], "GET") => Ok(invitations(context)),
         (["invitations"], "POST") => create_invitation(context, body),
+        (["invitations", id], "GET") => invitation(context, id),
         (["invitations", id], "DELETE") => cancel_invitation(context, id),
         (["policy"], "PUT") => set_policy(context, body),
         (["websocket"], "PUT") => set_websocket(context, body),
@@ -368,6 +379,7 @@ fn status(context: &ControlContext) -> Reply {
         json!({
             "control_api": CONTROL_API_VERSION,
             "transport_protocol": PROTOCOL_VERSION,
+            "rendezvous": {"supported": true, "code_version": 1},
             "host_version": env!("CARGO_PKG_VERSION"),
             "endpoint_id": addr.id.to_string(),
             "origin": context.origin,
@@ -422,6 +434,18 @@ fn revoke(context: &ControlContext, endpoint_id: &str) -> Result<Reply, Reply> {
     }
 }
 
+fn invitation_metadata(
+    context: &ControlContext,
+    invite: &kausway_transport::pairing::Invitation,
+) -> Value {
+    let mut value = json!({"id": invite.id, "label": invite.label,
+        "created_at": invite.created_at, "expires_at": invite.expires_at});
+    if let Some(status) = context.state.rendezvous_status(&invite.id, now_secs()) {
+        value["rendezvous"] = serde_json::to_value(status).expect("serializable metadata");
+    }
+    value
+}
+
 fn invitations(context: &ControlContext) -> Reply {
     let now = now_secs();
     let pending: Vec<Value> = context
@@ -429,36 +453,52 @@ fn invitations(context: &ControlContext) -> Reply {
         .snapshot()
         .invitations
         .iter()
-        .filter(|invitation| !invitation.is_redeemed() && invitation.expires_at > now)
-        .map(|invitation| {
-            json!({
-                "id": invitation.id,
-                "label": invitation.label,
-                "created_at": invitation.created_at,
-                "expires_at": invitation.expires_at,
-            })
-        })
+        .filter(|invite| !invite.is_redeemed() && invite.expires_at > now)
+        .map(|invite| invitation_metadata(context, invite))
         .collect();
     Reply::json(StatusCode::OK, json!({"invitations": pending}))
 }
 
+fn invitation(context: &ControlContext, id: &str) -> Result<Reply, Reply> {
+    let snapshot = context.state.snapshot();
+    let invite = snapshot
+        .invitations
+        .iter()
+        .find(|invite| invite.id == id && !invite.is_redeemed() && invite.expires_at > now_secs())
+        .ok_or_else(|| Reply::not_found("no pending invitation with that id"))?;
+    Ok(Reply::json(
+        StatusCode::OK,
+        invitation_metadata(context, invite),
+    ))
+}
+
 fn create_invitation(context: &ControlContext, body: &[u8]) -> Result<Reply, Reply> {
     let request: NewInvitation = parse_body(body)?;
-    let (invitation, token) = context
-        .state
-        .create_invitation(&request.label, request.ttl_secs, now_secs())
-        .map_err(Reply::state_error)?;
-    let link = InviteLink::new((context.addr)(), token).encode();
-    Ok(Reply::json(
-        StatusCode::CREATED,
-        json!({
-            "id": invitation.id,
-            "label": invitation.label,
-            "created_at": invitation.created_at,
-            "expires_at": invitation.expires_at,
-            "link": link,
-        }),
-    ))
+    let addr = (context.addr)();
+    let (invite, token, code) = if request.short_code {
+        let (invite, token, code) = context
+            .state
+            .create_rendezvous_invitation(
+                &request.label,
+                request.ttl_secs,
+                now_secs(),
+                addr.clone(),
+            )
+            .map_err(Reply::state_error)?;
+        (invite, token, Some(code))
+    } else {
+        let (invite, token) = context
+            .state
+            .create_invitation(&request.label, request.ttl_secs, now_secs())
+            .map_err(Reply::state_error)?;
+        (invite, token, None)
+    };
+    let mut value = invitation_metadata(context, &invite);
+    value["link"] = json!(InviteLink::new(addr, token).encode());
+    if let Some(code) = code {
+        value["short_code"] = json!(code.expose());
+    }
+    Ok(Reply::json(StatusCode::CREATED, value))
 }
 
 fn cancel_invitation(context: &ControlContext, id: &str) -> Result<Reply, Reply> {
@@ -604,10 +644,87 @@ mod tests {
             "not json",
             r#"{"label":""}"#,
             r#"{"label":"x","ttl_secs":5}"#,
+            r#"{"label":"x","short_code":"yes"}"#,
         ] {
             let reply = call(&fixture, "POST", "/v1/invitations", request);
             assert_eq!(reply.status, StatusCode::BAD_REQUEST, "{request}");
         }
+    }
+
+    #[test]
+    fn short_code_creation_keeps_url_and_secret_free_polling_and_single_use() {
+        let mut fixture = fixture(RelayChoice::Disabled);
+        let id = iroh::SecretKey::generate().public();
+        fixture.context.addr =
+            Box::new(move || EndpointAddr::new(id).with_ip_addr("127.0.0.1:4321".parse().unwrap()));
+        let unauthenticated = route(
+            &fixture.context,
+            "POST",
+            "/v1/invitations",
+            None,
+            br#"{"label":"Phone","short_code":true}"#,
+        );
+        assert_eq!(unauthenticated.status, StatusCode::UNAUTHORIZED);
+        assert!(fixture.context.state.snapshot().invitations.is_empty());
+        let created = call(
+            &fixture,
+            "POST",
+            "/v1/invitations",
+            r#"{"label":"Phone","short_code":true}"#,
+        );
+        assert_eq!(created.status, StatusCode::CREATED);
+        let value = body(&created);
+        let code = kausway_rendezvous::Code::parse(value["short_code"].as_str().unwrap()).unwrap();
+        let invite = InviteLink::decode(value["link"].as_str().unwrap()).unwrap();
+        assert_eq!(value["rendezvous"]["state"], "pending");
+        let path = format!("/v1/invitations/{}", value["id"].as_str().unwrap());
+        let work = fixture
+            .context
+            .state
+            .rendezvous_publications(&(fixture.context.addr)(), now_secs())
+            .unwrap()
+            .pop()
+            .unwrap();
+        fixture
+            .context
+            .state
+            .rendezvous_result(&work.id, work.sequence, now_secs(), true)
+            .unwrap();
+        let polled = call(&fixture, "GET", &path, "");
+        assert_eq!(body(&polled)["rendezvous"]["state"], "published");
+        for response in [call(&fixture, "GET", "/v1/invitations", ""), polled] {
+            let text = body(&response).to_string();
+            for secret in [
+                code.expose(),
+                invite.token.clone(),
+                value["link"].as_str().unwrap().into(),
+                "signing_seed".into(),
+                "encryption_key".into(),
+            ] {
+                assert!(!text.contains(&secret));
+            }
+        }
+        let recovered =
+            kausway_rendezvous::decode_packet(&code.secrets(), &work.packet, now_secs()).unwrap();
+        assert_eq!(invite, recovered);
+        fixture
+            .context
+            .state
+            .pair("phone", "Phone", Some(&recovered.token), now_secs())
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            call(&fixture, "GET", &path, "").status,
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            fixture
+                .context
+                .state
+                .pair("another", "Other", Some(&invite.token), now_secs())
+                .unwrap(),
+            Err(kausway_transport::pairing::RedeemError::AlreadyUsed)
+        );
     }
 
     #[test]

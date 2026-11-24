@@ -107,7 +107,7 @@ Revokes an active device: `204`, or `404` if there is no active device with that
 
 ### `GET /v1/invitations`
 
-Unredeemed, unexpired invitations. Tokens are never stored, so they cannot be listed.
+Unredeemed, unexpired invitations. Tokens and short codes are never listed. Ordinary invitations remain hash-only; active short-code invitations keep private encrypted recovery material.
 
 ```json
 {"invitations":[{"id":"inv-3feafff70d54","label":"Phone","created_at":1793740000,"expires_at":1793743600}]}
@@ -125,6 +125,29 @@ Response `201`:
 ```
 
 The link holds the plaintext token. It is returned only once.
+
+Optional `short_code: true` in the creation request returns an additional
+`short_code` string and `rendezvous` metadata. The `link` field always contains
+the existing full URL. The two inputs share the same token, expiry, cancellation
+and one-time redemption. Publication is asynchronous; creation does not wait for
+DHT/gateway reachability. Missing or `false` preserves URL-only creation.
+
+`rendezvous` metadata contains `state` (`pending`, `published`, `retrying`),
+`published_at` (nullable Unix seconds), `next_attempt_at` (Unix seconds) and
+`error` (nullable safe error code). Listings include metadata for code invitations
+but never keys, codes, URLs or tokens. A publication acknowledgment is not a
+guarantee of global discoverability. `too_large` means the encoded invitation
+cannot fit discovery; the original full URL remains valid.
+
+### `GET /v1/invitations/{id}`
+
+Returns one pending invitation's metadata, including optional `rendezvous`.
+Returns `404` after cancellation, expiry or redemption. Requires the control
+bearer token, as do listings. The host reloads persisted invitations before
+answering so CLI-created invitations can be polled immediately.
+
+`GET /v1/status` advertises `rendezvous: {"supported": true, "code_version": 1}`.
+Older hosts omit this capability; UIs should offer their existing URL-only flow.
 
 ### `DELETE /v1/invitations/{id}`
 

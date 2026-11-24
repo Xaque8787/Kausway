@@ -57,22 +57,13 @@ pub async fn run(
     }
 
     let shutdown = CancellationToken::new();
-    if config.relay != RelayChoice::Disabled {
-        tokio::spawn(report_online(endpoint.clone()));
-    }
-    tokio::spawn(maintain(
-        endpoint.clone(),
-        state.clone(),
-        config.data_dir.join(ADDR_FILE),
-        shutdown.clone(),
-    ));
     let service = HostService::new(
         config.origin.clone(),
         Arc::new(StateRegistry::new(state.clone())),
     );
     if let Some(control) = &config.control {
         let mut context = ControlContext::new(
-            state,
+            state.clone(),
             service.sessions(),
             Box::new({
                 let endpoint = endpoint.clone();
@@ -94,9 +85,32 @@ pub async fn run(
                 });
         start_control(control, &config.data_dir, context, shutdown.clone()).await?;
     }
+    if config.relay != RelayChoice::Disabled {
+        tokio::spawn(report_online(endpoint.clone()));
+    }
+    tokio::spawn(maintain(
+        endpoint.clone(),
+        state.clone(),
+        config.data_dir.join(ADDR_FILE),
+        shutdown.clone(),
+    ));
+    let mut rendezvous = tokio::spawn(crate::rendezvous::run(
+        state,
+        endpoint.clone(),
+        shutdown.clone(),
+        config.rendezvous.clone(),
+    ));
     tokio::spawn(stop_on_signal(shutdown.clone()));
 
-    serve(endpoint, service, shutdown).await;
+    serve(endpoint, service, shutdown.clone()).await;
+    shutdown.cancel();
+    if tokio::time::timeout(Duration::from_secs(3), &mut rendezvous)
+        .await
+        .is_err()
+    {
+        rendezvous.abort();
+        let _ = rendezvous.await;
+    }
     info!("host stopped");
     Ok(())
 }
@@ -165,12 +179,15 @@ async fn maintain(
         }
         let addr = endpoint.addr();
         if published.as_ref() != Some(&addr) {
-            match publish_addr(&addr_path, &addr) {
-                Ok(()) => {
+            let path = addr_path.clone();
+            let next_addr = addr.clone();
+            match tokio::task::spawn_blocking(move || publish_addr(&path, &next_addr)).await {
+                Ok(Ok(())) => {
                     debug!(?addr, "published endpoint address");
                     published = Some(addr);
                 }
-                Err(error) => warn!(%error, "could not write {}", addr_path.display()),
+                Ok(Err(error)) => warn!(%error, "could not write {}", addr_path.display()),
+                Err(_) => warn!("endpoint address task failed"),
             }
         }
     }

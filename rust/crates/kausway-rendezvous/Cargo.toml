@@ -1,0 +1,29 @@
+[package]
+name = "kausway-rendezvous"
+description = "Optional encrypted short-code invitation discovery"
+version = "0.5.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+base64.workspace = true
+futures-util.workspace = true
+chacha20poly1305 = { version = "=0.10.1", default-features = false, features = ["alloc"] }
+hkdf = "=0.12.4"
+iroh.workspace = true
+iroh-dns = "=1.4.1"
+kausway-transport.workspace = true
+mainline = "=6.2.0"
+rand.workspace = true
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider"] }
+rustls = { version = "0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+zeroize = { version = "1.8", features = ["derive"] }
+webpki-roots = "1"

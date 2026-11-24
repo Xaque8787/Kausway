@@ -3,6 +3,30 @@ let setupToken = new URLSearchParams(location.hash.slice(1)).get('token') || '';
 if (location.hash) history.replaceState(null, '', location.pathname);
 let csrf = '';
 const message = document.getElementById('message');
+let activeInvitation = null;
+function clearInvitation() {
+  activeInvitation = null;
+  document.getElementById('invite-link').value = '';
+  document.getElementById('invite-code').value = '';
+  document.getElementById('new-invite').hidden = true;
+  document.getElementById('short-code-result').hidden = true;
+  document.getElementById('invite-publication').textContent = '';
+}
+function publicationText(invitation) {
+  const status = invitation.rendezvous;
+  if (!status) return 'URL only';
+  if (status.state === 'published') return 'Publication acknowledged. Try the code, or use the full URL.';
+  if (status.state === 'retrying') return `Publication is retrying${status.error === 'too_large' ? ': the address does not fit a discovery record' : ''}. Use the full invitation URL now.`;
+  return 'Publishing short code… The full invitation URL can be used now.';
+}
+function updateInvitationExpiry() {
+  if (!activeInvitation) return;
+  const seconds = Math.ceil(activeInvitation.expires_at - Date.now() / 1000);
+  if (seconds <= 0) { clearInvitation(); return; }
+  document.getElementById('invite-expiry').textContent = `Expires in ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}. Either input redeems this invitation once.`;
+}
+window.addEventListener('pagehide', clearInvitation);
+setInterval(updateInvitationExpiry, 1000);
 async function api(path, body) {
   const response = await fetch(path, body === undefined ? {cache: 'no-store'} : {
     method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
@@ -120,8 +144,16 @@ async function refreshOverview() {
       button.disabled = !overview.lifecycle.allowed || observed === 'stopping' || (button.dataset.lifecycle === 'start' ? active : !active);
     }
     document.getElementById('create-invite').disabled = !host.available;
+    const codeOption = document.getElementById('invite-short-code');
+    codeOption.disabled = !host.available || !host.status?.rendezvous?.supported;
+    if (codeOption.disabled) codeOption.checked = false;
+    if (activeInvitation && host.available) {
+      const current = overview.invitations.find(invitation => invitation.id === activeInvitation.id);
+      if (!current) clearInvitation();
+      else document.getElementById('invite-publication').textContent = publicationText(current);
+    }
     document.getElementById('apply-config').disabled = !host.available;
-    table('invitation-list', ['Label', 'Expires', 'Action'], overview.invitations.map(invitation => [invitation.label, new Date(invitation.expires_at * 1000).toLocaleString(), action('Cancel', '/api/invitations/cancel', {id: invitation.id}, 'Cancel this invitation?')]));
+    table('invitation-list', ['Label', 'Expires', 'Short code', 'Action'], overview.invitations.map(invitation => [invitation.label, new Date(invitation.expires_at * 1000).toLocaleString(), publicationText(invitation), action('Cancel', '/api/invitations/cancel', {id: invitation.id}, 'Cancel this invitation?')]));
     table('device-list', ['Name', 'Endpoint', 'State', 'Action'], overview.devices.map(device => [device.name, device.endpoint_id, device.revoked_at ? 'Revoked' : device.connected ? 'Connected' : 'Authorized', device.revoked_at ? '' : action('Revoke', '/api/devices/revoke', {id: device.endpoint_id}, 'Revoke this device? Its active connections will end.')]));
     table('session-list', ['Device', 'Endpoint', 'Path', 'RTT ms', 'Requests', 'Bytes sent'], overview.sessions.map(session => [session.name, session.endpoint_id, session.path?.kind, session.path?.rtt_ms, session.requests, session.bytes_sent]));
     const diagnostics = document.getElementById('diagnostic-list'); diagnostics.replaceChildren();
@@ -201,7 +233,7 @@ for (const button of document.querySelectorAll('[data-lifecycle]')) {
   });
 }
 document.getElementById('refresh-host').addEventListener('click', async () => {
-  document.getElementById('invite-link').value = ''; document.getElementById('new-invite').hidden = true; await refreshOverview();
+  clearInvitation(); await refreshOverview();
 });
 document.getElementById('settings-form').addEventListener('input', () => { settingsDirty = true; });
 document.getElementById('settings-form').addEventListener('change', () => { settingsDirty = true; });
@@ -223,8 +255,13 @@ document.getElementById('apply-config').addEventListener('click', async () => {
 document.getElementById('invite-form').addEventListener('submit', async event => {
   event.preventDefault(); const fields = new FormData(event.currentTarget);
   try {
-    const result = await api('/api/invitations/create', {csrf, label: fields.get('label'), ttl_secs: Number(fields.get('ttl_secs'))});
+    const result = await api('/api/invitations/create', {csrf, label: fields.get('label'), ttl_secs: Number(fields.get('ttl_secs')), short_code: fields.get('short_code') === 'on'});
+    activeInvitation = result;
+    document.getElementById('invite-code').value = result.short_code || '';
+    document.getElementById('short-code-result').hidden = !result.short_code;
+    document.getElementById('invite-publication').textContent = publicationText(result);
     document.getElementById('invite-link').value = result.link; document.getElementById('new-invite').hidden = false;
+    updateInvitationExpiry();
     await refreshOverview();
   } catch (error) { message.textContent = error.message; }
 });
@@ -235,3 +272,10 @@ document.getElementById('copy-invite').addEventListener('click', async () => {
 });
 setInterval(() => { if (csrf && !document.hidden) refreshOverview(); }, 5000);
 initialize();
+
+document.getElementById('copy-code').addEventListener('click', async () => {
+  const field = document.getElementById('invite-code');
+  if (!field.value) return;
+  try { await navigator.clipboard.writeText(field.value); message.textContent = 'Short code copied.'; }
+  catch { field.select(); message.textContent = 'Select and copy the short code.'; }
+});

@@ -90,8 +90,10 @@ public class ControlApiClientTests
         Assert.Contains("host_unreachable", reply.Body, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task SendsBearerTokenMethodPathAndBody()
+    [Theory]
+    [InlineData("{\"label\":\"TV\"}")]
+    [InlineData("{\"label\":\"TV\",\"short_code\":true}")]
+    public async Task SendsBearerTokenMethodPathAndBody(string invitationRequest)
     {
         var port = FreePort();
         using var listener = new HttpListener();
@@ -112,11 +114,11 @@ public class ControlApiClientTests
         });
 
         var settings = new ControlSettings(new Uri($"http://127.0.0.1:{port}"), "abc123", "unused");
-        var result = await new ControlApiClient(settings).SendAsync(HttpMethod.Post, "invitations", "{\"label\":\"TV\"}", CancellationToken.None);
+        var result = await new ControlApiClient(settings).SendAsync(HttpMethod.Post, "invitations", invitationRequest, CancellationToken.None);
 
         Assert.Equal(201, result.StatusCode);
         Assert.Equal("{\"ok\":true}", result.Body);
-        Assert.Equal("POST /v1/invitations Bearer abc123 {\"label\":\"TV\"}", await served);
+        Assert.Equal("POST /v1/invitations Bearer abc123 " + invitationRequest, await served);
     }
 
     private static int FreePort()

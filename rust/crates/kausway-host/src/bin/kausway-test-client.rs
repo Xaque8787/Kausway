@@ -2,8 +2,8 @@
 //! browser or media app on this machine can reach the host's origin over Iroh.
 
 use clap::{Args, Parser, Subcommand};
-use kausway_client::{Client, ClientConfig};
-use kausway_host::config::parse_relay;
+use kausway_client::{Client, ClientConfig, PairingStage};
+use kausway_host::config::{RendezvousArgs, parse_relay};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -25,6 +25,8 @@ struct Cli {
 
 #[derive(Debug, Args)]
 struct Common {
+    #[command(flatten)]
+    rendezvous: RendezvousArgs,
     /// Directory holding this client's identity and the paired host's address.
     #[arg(long, global = true, env = "KAUSWAY_CLIENT_DATA_DIR")]
     #[cfg_attr(
@@ -42,7 +44,7 @@ struct Common {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// Redeem an invitation link and remember the host.
+    /// Redeem a full invitation URL or K1 short code and remember the host.
     Pair { link: String },
     /// Connect and report authorization, policy, path, and round-trip times.
     Status,
@@ -89,24 +91,44 @@ async fn run(cli: Cli) -> Result<(), String> {
         #[cfg(not(target_os = "android"))]
         None => PathBuf::from("./kausway-client-data"),
     };
-    let client = Client::new(ClientConfig {
-        data_dir,
-        name: common.name,
-        relay: parse_relay(common.relay_url.as_deref())?,
-    })
+    let discovery = common.rendezvous.network_config()?;
+    let client = Client::new_with_rendezvous(
+        ClientConfig {
+            data_dir,
+            name: common.name,
+            relay: parse_relay(common.relay_url.as_deref())?,
+        },
+        discovery,
+    )
     .await
     .map_err(|e| e.to_string())?;
     let result = match cli.command {
-        Command::Pair { link } => match client.pair(&link).await {
-            Ok(paired) => {
-                println!(
-                    "{:?}: host {} (transport policy {})",
-                    paired.outcome, paired.host_id, paired.transport_policy
-                );
-                Ok(())
+        Command::Pair { link } => {
+            let pairing = client.pair_with_progress(&link, |stage| {
+                eprintln!(
+                    "{}",
+                    match stage {
+                        PairingStage::Resolving => "Resolving short code…",
+                        PairingStage::Connecting => "Connecting to host…",
+                    }
+                )
+            });
+            tokio::pin!(pairing);
+            let result = tokio::select! {
+                result = &mut pairing => result,
+                _ = tokio::signal::ctrl_c() => { client.cancel_pairing(); pairing.await },
+            };
+            match result {
+                Ok(paired) => {
+                    println!(
+                        "{:?}: host {} (transport policy {})",
+                        paired.outcome, paired.host_id, paired.transport_policy
+                    );
+                    Ok(())
+                }
+                Err(e) => Err(e.to_string()),
             }
-            Err(e) => Err(e.to_string()),
-        },
+        }
         Command::Status => status(&client).await,
         Command::Fetch {
             path,

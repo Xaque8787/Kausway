@@ -588,3 +588,180 @@ async fn reconnects_after_a_closed_session_without_replaying_requests() {
     assert_eq!(body(&response), &file_bytes()[10..20]);
     client.shutdown().await;
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn short_code_pairs_over_dht_then_reconnects_without_discovery() {
+    use kausway_rendezvous::{
+        Code,
+        backend::{Network, NetworkConfig},
+        fit_packet,
+    };
+    let harness = start_host().await;
+    let testnet = mainline::Testnet::builder(3)
+        .bind_address(std::net::Ipv4Addr::LOCALHOST)
+        .build()
+        .unwrap();
+    let discovery = NetworkConfig {
+        bootstrap: Some(
+            testnet
+                .bootstrap
+                .iter()
+                .map(|s| s.parse().unwrap())
+                .collect(),
+        ),
+        ..Default::default()
+    };
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let code = Code::generate();
+    let link = InviteLink::new(harness.host_addr.clone(), TOKEN.into());
+    let packet = fit_packet(&code.secrets(), &link, now + 900, now * 1_000_000, now).unwrap();
+    Network::new(discovery.clone())
+        .unwrap()
+        .publish(&packet)
+        .await
+        .unwrap();
+    let dir = TempDir::new();
+    let config = ClientConfig {
+        data_dir: dir.0.clone(),
+        name: "Short code client".into(),
+        relay: RelayChoice::Disabled,
+    };
+    let client = Client::new_with_rendezvous(config.clone(), discovery)
+        .await
+        .unwrap();
+    let stages = Mutex::new(Vec::new());
+    let paired = client
+        .pair_with_progress(&code.expose().to_lowercase(), |stage| {
+            stages.lock().unwrap().push(stage)
+        })
+        .await
+        .unwrap();
+    assert_eq!(paired.host_id, harness.host_addr.id.to_string());
+    assert_eq!(
+        *stages.lock().unwrap(),
+        [
+            kausway_client::PairingStage::Resolving,
+            kausway_client::PairingStage::Connecting
+        ]
+    );
+    assert_eq!(client.pairing_stage(), None);
+    let connection = client
+        .start_proxy("127.0.0.1:0".parse().unwrap(), true)
+        .await
+        .unwrap();
+    let reply = request(&connection.proxy_url, "file", "Range: bytes=10-19\r\n").await;
+    assert!(reply.starts_with(b"HTTP/1.1 206"));
+    assert_eq!(body(&reply), &file_bytes()[10..20]);
+    let saved = std::fs::read_to_string(dir.0.join("host.json")).unwrap();
+    assert!(!saved.contains(&code.expose()) && !saved.contains(TOKEN));
+    client.shutdown().await;
+    drop(client);
+    // Disabled discovery must not affect saved-host reconnects or direct URL pairing.
+    let client = Client::new_with_rendezvous(
+        config,
+        NetworkConfig {
+            dht: false,
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    client.pair(&link.encode()).await.unwrap();
+    let session = client.connect().await.unwrap();
+    assert_eq!(session.outcome(), AuthOutcome::Authorized);
+    session.close().await;
+    client.shutdown().await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn discovery_does_not_hold_lifecycle_lock_or_replace_pairing_on_cancel_or_failure() {
+    use kausway_rendezvous::{Code, backend::NetworkConfig};
+    for shutdown in [false, true] {
+        let harness = start_host().await;
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let gateway = format!("http://{}", listener.local_addr().unwrap());
+        let (seen, request_started) = tokio::sync::oneshot::channel();
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut bytes = [0; 1024];
+            assert!(socket.read(&mut bytes).await.unwrap() > 0);
+            seen.send(()).unwrap();
+            // Deliberately hold a live request indefinitely; cancellation must interrupt it.
+            let _socket = socket;
+            std::future::pending::<()>().await;
+        });
+        let dir = TempDir::new();
+        let client = Arc::new(
+            Client::new_with_rendezvous(
+                ClientConfig {
+                    data_dir: dir.0.clone(),
+                    name: "Cancel test".into(),
+                    relay: RelayChoice::Disabled,
+                },
+                NetworkConfig {
+                    dht: false,
+                    gateways: vec![gateway],
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap(),
+        );
+        let link = InviteLink::new(harness.host_addr.clone(), TOKEN.into()).encode();
+        client.pair(&link).await.unwrap(); // no discovery request for a URL
+        let saved = std::fs::read(dir.0.join("host.json")).unwrap();
+        let proxy = client
+            .start_proxy("127.0.0.1:0".parse().unwrap(), true)
+            .await
+            .unwrap();
+        let pairing = {
+            let client = client.clone();
+            tokio::spawn(async move { client.pair(&Code::generate().expose()).await })
+        };
+        tokio::time::timeout(Duration::from_secs(3), request_started)
+            .await
+            .unwrap()
+            .unwrap();
+        let status = tokio::time::timeout(Duration::from_secs(1), client.status())
+            .await
+            .unwrap();
+        assert_eq!(
+            status.pairing_stage,
+            Some(kausway_client::PairingStage::Resolving)
+        );
+        assert_eq!(status.proxy_url.as_deref(), Some(proxy.proxy_url.as_str()));
+        if shutdown {
+            tokio::time::timeout(Duration::from_secs(2), client.shutdown())
+                .await
+                .unwrap();
+        } else {
+            client.cancel_pairing();
+        }
+        let result = tokio::time::timeout(Duration::from_secs(2), pairing)
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            matches!(result, Err(Error::Closed)) && shutdown
+                || matches!(result, Err(Error::Cancelled)) && !shutdown
+        );
+        assert_eq!(client.pairing_stage(), None);
+        assert_eq!(std::fs::read(dir.0.join("host.json")).unwrap(), saved);
+        if !shutdown {
+            assert_eq!(
+                client.status().await.proxy_url.as_deref(),
+                Some(proxy.proxy_url.as_str())
+            );
+            // Invalid input also leaves the existing proxy and saved pairing intact.
+            assert!(matches!(
+                client.pair("not a code").await,
+                Err(Error::InvalidInvitation)
+            ));
+            client.shutdown().await;
+        }
+        server.abort();
+    }
+}

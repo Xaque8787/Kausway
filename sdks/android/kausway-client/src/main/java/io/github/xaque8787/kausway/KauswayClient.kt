@@ -15,6 +15,12 @@ data class KauswayConfig(
     val deviceName: String = "Android client",
     /** null: Iroh defaults; "none": direct LAN testing; otherwise custom HTTPS relay URL. */
     val relayUrl: String? = null,
+    /** Discovery uses Mainline DHT by default. These settings do not change Iroh traffic relays. */
+    val rendezvousDht: Boolean = true,
+    /** HTTPS Pkarr gateway base URLs. HTTP is accepted only for explicit loopback fixtures. */
+    val rendezvousGateways: List<String> = emptyList(),
+    /** One discovery deadline, 1–30 seconds. Host connection has its own 30-second deadline. */
+    val rendezvousTimeoutSeconds: Int = 10,
 )
 
 data class ProxyConnection(val proxyUrl: String)
@@ -22,7 +28,8 @@ enum class ConnectionState { IDLE, CONNECTED, DISCONNECTED, CLOSED, UNKNOWN }
 enum class AuthorizationStatus { AUTHORIZED, DENIED, REVOKED, UNKNOWN }
 enum class TransportPath { DIRECT, RELAY, UNKNOWN }
 enum class TransportPolicy { AUTO, P2P_ONLY, RELAY_ONLY, UNKNOWN }
-enum class KauswayErrorCode { INVALID_INVITATION, AUTHORIZATION_DENIED, NOT_PAIRED, CLOSED, CONFIGURATION, STORAGE, TRANSPORT, INTERNAL }
+enum class PairingStage { RESOLVING, CONNECTING }
+enum class KauswayErrorCode { CANCELLED, RENDEZVOUS_NOT_FOUND, RENDEZVOUS_TIMEOUT, RENDEZVOUS_EXPIRED, RENDEZVOUS_INVALID_RECORD, RENDEZVOUS_UNAVAILABLE, INVALID_INVITATION, AUTHORIZATION_DENIED, NOT_PAIRED, CLOSED, CONFIGURATION, STORAGE, TRANSPORT, INTERNAL }
 class KauswayException(val code: KauswayErrorCode, message: String, val serverCode: String? = null) : Exception(message)
 data class ConnectionStatus(
     val state: ConnectionState,
@@ -46,7 +53,7 @@ internal object NativeBridge {
  * Native work runs off the UI thread. Lifecycle mutations finish even if the calling
  * coroutine is cancelled; stopProxy/shutdown cancel active media streams and upgrades.
  */
-class KauswayClient private constructor(private var handle: Long) {
+class KauswayClient private constructor(@Volatile private var handle: Long) {
     private val mutex = Mutex()
     companion object {
         suspend fun initialize(context: Context, config: KauswayConfig? = null): KauswayClient {
@@ -58,7 +65,7 @@ class KauswayClient private constructor(private var handle: Long) {
                     val privateRoot = context.applicationInfo.dataDir.let(::File).canonicalFile
                     if (!directory.path.startsWith(privateRoot.path + File.separator)) throw KauswayException(KauswayErrorCode.CONFIGURATION, "Storage must be a dedicated app-private subdirectory")
                     NativeBridge.initializeTls(context.applicationContext)
-                    val args = JSONObject().put("dataDir", directory.path).put("deviceName", effectiveConfig.deviceName).put("relayUrl", effectiveConfig.relayUrl)
+                    val args = JSONObject().put("dataDir", directory.path).put("deviceName", effectiveConfig.deviceName).put("relayUrl", effectiveConfig.relayUrl).put("rendezvousDht", effectiveConfig.rendezvousDht).put("rendezvousGateways", org.json.JSONArray(effectiveConfig.rendezvousGateways)).put("rendezvousTimeoutSeconds", effectiveConfig.rendezvousTimeoutSeconds)
                     KauswayClient(decode(NativeBridge.invoke(0, "initialize", args.toString())).getLong("handle")).also { created = it }
                 }
             } catch (error: Throwable) {
@@ -81,11 +88,24 @@ class KauswayClient private constructor(private var handle: Long) {
             decode(NativeBridge.invoke(handle, operation, argument))
         }
     }
+    /** Accepts the existing full invitation URL or a K1 short code. Never log either input. */
     suspend fun pair(invitationLink: String) { call("pair", invitationLink) }
+    /** Can be polled while pair() is running; it does not wait behind lifecycle mutations. */
+    suspend fun getPairingProgress(): PairingStage? = withContext(Dispatchers.IO) {
+        val current = handle
+        if (current == 0L) null else decode(NativeBridge.invoke(current, "pairingProgress", ""))
+            .nullableString("stage")?.let { enumValue(it, PairingStage.CONNECTING) }
+    }
+    /** Interrupts discovery or an in-progress host connection without forgetting saved pairing. */
+    suspend fun cancelPairing() = withContext(Dispatchers.IO + NonCancellable) {
+        val current = handle
+        if (current != 0L) decode(NativeBridge.invoke(current, "cancelPairing", ""))
+        Unit
+    }
     suspend fun startProxy(): ProxyConnection = ProxyConnection(call("startProxy").getString("proxy_url"))
     suspend fun stopProxy() { call("stopProxy") }
     /** Retains device identity. Does not revoke the device on the host. */
-    suspend fun forgetPairing() { call("forgetPairing") }
+    suspend fun forgetPairing() { cancelPairing(); call("forgetPairing") }
     suspend fun notifyNetworkChange() { call("networkChange") }
     suspend fun getStatus(): ConnectionStatus {
         val s = call("status")
@@ -99,6 +119,9 @@ class KauswayClient private constructor(private var handle: Long) {
         )
     }
     suspend fun shutdown() = withContext(Dispatchers.IO + NonCancellable) {
+        // Pairing holds the Kotlin mutation lock, so request cancellation before waiting for it.
+        val current = handle
+        if (current != 0L) NativeBridge.invoke(current, "cancelPairing", "")
         mutex.withLock {
             if (handle != 0L) {
                 decode(NativeBridge.invoke(handle, "shutdown", ""))

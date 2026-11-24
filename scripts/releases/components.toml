@@ -8,6 +8,7 @@ kausway-host = "suite"
 kausway-admin = "suite"
 kausway-config = "suite"
 kausway-transport = "suite"
+kausway-rendezvous = "suite"
 kausway-client = "client"
 kausway-client-android = "client"
 

@@ -213,6 +213,12 @@ pub struct InviteArgs {
     /// How long the link stays valid, in seconds (60 to 86400).
     #[arg(long)]
     pub ttl_secs: Option<u64>,
+    /// Also create a short code. Requires a running host; implies JSON output with both inputs.
+    #[arg(long)]
+    pub short_code: bool,
+    /// Print invitation metadata as JSON instead of only the URL.
+    #[arg(long)]
+    pub json: bool,
     /// Relay to put in the link when the running host's address is not known. Same values as serve.
     #[arg(long, env = "KAUSWAY_RELAY_URL")]
     pub relay_url: Option<String>,
@@ -248,6 +254,8 @@ pub struct RunArgs {
     pub managed: bool,
     #[command(flatten)]
     pub data: DataArgs,
+    #[command(flatten)]
+    pub rendezvous: RendezvousArgs,
     /// Local HTTP service to forward requests to. Plain http:// only.
     #[arg(long, env = "KAUSWAY_ORIGIN", default_value = "http://127.0.0.1:8096")]
     pub origin: String,
@@ -273,6 +281,35 @@ pub struct RunArgs {
     /// When omitted, the setting in state.json is used.
     #[arg(long, env = "KAUSWAY_WEBSOCKET_ORIGIN")]
     pub websocket_origin: Option<String>,
+}
+
+/// Discovery gateways are distinct from Iroh application-traffic relays.
+#[derive(Debug, Clone, Args)]
+pub struct RendezvousArgs {
+    /// Enable Mainline DHT discovery. This does not change Iroh relay settings.
+    #[arg(long, env = "KAUSWAY_RENDEZVOUS_DHT", default_value = "true", action = clap::ArgAction::Set)]
+    pub rendezvous_dht: bool,
+    /// HTTPS Pkarr gateway base URL. Repeat the flag, or use comma-separated environment URLs.
+    #[arg(long, env = "KAUSWAY_RENDEZVOUS_GATEWAYS", value_delimiter = ',')]
+    pub rendezvous_gateway: Vec<String>,
+    /// Discovery operation timeout, in seconds (1–30).
+    #[arg(long, env = "KAUSWAY_RENDEZVOUS_TIMEOUT_SECS", default_value = "10", value_parser = clap::value_parser!(u64).range(1..=30))]
+    pub rendezvous_timeout_secs: u64,
+}
+
+impl RendezvousArgs {
+    pub fn network_config(&self) -> Result<kausway_rendezvous::backend::NetworkConfig, String> {
+        let config = kausway_rendezvous::backend::NetworkConfig {
+            dht: self.rendezvous_dht,
+            gateways: self.rendezvous_gateway.clone(),
+            timeout: std::time::Duration::from_secs(self.rendezvous_timeout_secs),
+            ..Default::default()
+        };
+        config
+            .validate()
+            .map_err(|_| "invalid rendezvous settings".to_owned())?;
+        Ok(config)
+    }
 }
 
 impl std::fmt::Debug for RunArgs {
@@ -319,6 +356,7 @@ pub struct HostConfig {
     pub origin: Origin,
     pub policy: Option<TransportPolicy>,
     pub relay: RelayChoice,
+    pub rendezvous: kausway_rendezvous::backend::NetworkConfig,
     pub control: Option<ControlConfig>,
     pub websockets_enabled: Option<bool>,
     pub websocket_origin: Option<OriginHeader>,
@@ -338,6 +376,11 @@ impl RunArgs {
     /// Validates every setting, reporting all problems at once.
     pub fn validate(&self) -> Result<HostConfig, Vec<String>> {
         let mut problems = Vec::new();
+        let rendezvous = self
+            .rendezvous
+            .network_config()
+            .map_err(|error| problems.push(error))
+            .unwrap_or_default();
         let origin = Origin::parse(&self.origin)
             .map_err(|error| problems.push(format!("KAUSWAY_ORIGIN: {error}")))
             .ok();
@@ -381,6 +424,7 @@ impl RunArgs {
                 origin,
                 policy,
                 relay,
+                rendezvous,
                 control,
                 websockets_enabled,
                 websocket_origin,
@@ -433,6 +477,11 @@ mod tests {
     fn args(origin: &str, policy: Option<&str>, relay: Option<&str>) -> RunArgs {
         RunArgs {
             managed: false,
+            rendezvous: RendezvousArgs {
+                rendezvous_dht: true,
+                rendezvous_gateway: vec![],
+                rendezvous_timeout_secs: 10,
+            },
             data: DataArgs {
                 data_dir: "./data".into(),
                 config: None,

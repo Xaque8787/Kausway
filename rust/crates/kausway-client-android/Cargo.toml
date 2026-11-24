@@ -13,6 +13,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 kausway-client-core = { package = "kausway-client", path = "../kausway-client" }
 kausway-transport.workspace = true
+kausway-rendezvous.workspace = true
 jni = "=0.21.1"
 serde.workspace = true
 serde_json.workspace = true

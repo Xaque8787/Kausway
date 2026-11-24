@@ -57,8 +57,8 @@ public class KauswayController : ControllerBase
     public Task<ActionResult> GetInvitations(CancellationToken cancellationToken)
         => Forward(HttpMethod.Get, "invitations", null, cancellationToken);
 
-    /// <summary>Creates an invitation and returns its link.</summary>
-    /// <param name="body">JSON with label and optional ttl_secs.</param>
+    /// <summary>Creates an invitation with its URL and an optional short code.</summary>
+    /// <param name="body">JSON with label, optional ttl_secs and optional short_code.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>The control API reply.</returns>
     [HttpPost("Invitations")]
@@ -92,7 +92,7 @@ public class KauswayController : ControllerBase
     public Task<ActionResult> SetWebSocket([FromBody] JsonElement body, CancellationToken cancellationToken)
         => Forward(HttpMethod.Put, "websocket", body.GetRawText(), cancellationToken);
 
-    private static async Task<ActionResult> Forward(
+    private async Task<ActionResult> Forward(
         HttpMethod method,
         string path,
         string? body,
@@ -120,8 +120,9 @@ public class KauswayController : ControllerBase
         return Reply(reply);
     }
 
-    private static ActionResult Reply(ControlResponse reply)
+    private ActionResult Reply(ControlResponse reply)
     {
+        Response.Headers.CacheControl = "no-store";
         if (string.IsNullOrEmpty(reply.Body))
         {
             return new StatusCodeResult(reply.StatusCode);

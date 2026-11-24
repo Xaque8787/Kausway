@@ -10,6 +10,7 @@ publish.workspace = true
 [dependencies]
 iroh.workspace = true
 kausway-transport.workspace = true
+kausway-rendezvous.workspace = true
 bytes.workspace = true
 futures-util.workspace = true
 http.workspace = true
@@ -22,3 +23,6 @@ thiserror.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 tracing.workspace = true
+
+[dev-dependencies]
+mainline = "=6.2.0"

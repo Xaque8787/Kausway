@@ -19,6 +19,8 @@ path = "src/bin/kausway-test-client.rs"
 [dependencies]
 iroh.workspace = true
 kausway-transport.workspace = true
+kausway-rendezvous.workspace = true
+rand.workspace = true
 bytes.workspace = true
 clap.workspace = true
 futures-util.workspace = true

@@ -135,6 +135,8 @@ jobs:
         run: |
           cargo build ${{ steps.lock.outputs.flag }} -p kausway-host --bins
           bash ../scripts/ci/e2e.sh target/debug
+          python3 ../scripts/ci/short-code-e2e.py target/debug
+          node ../scripts/ci/invitation-ui-test.js
 
       - name: Summary
         if: always()

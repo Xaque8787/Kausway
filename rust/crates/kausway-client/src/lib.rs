@@ -3,6 +3,11 @@
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 use iroh::{Endpoint, EndpointAddr};
+use kausway_rendezvous::{
+    Code,
+    backend::{Network, NetworkConfig},
+    decode_packet,
+};
 use kausway_transport::{
     client::{ClientError, ClientSession},
     invite::InviteLink,
@@ -10,7 +15,8 @@ use kausway_transport::{
 };
 use serde::Serialize;
 use std::{net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, OnceCell};
+use tokio_util::sync::CancellationToken;
 
 pub mod fsutil;
 pub mod identity;
@@ -27,6 +33,10 @@ pub struct ClientConfig {
 pub enum Error {
     #[error("invalid invitation")]
     InvalidInvitation,
+    #[error("pairing cancelled")]
+    Cancelled,
+    #[error("short-code discovery failed: {0}; try the full invitation URL")]
+    Rendezvous(kausway_rendezvous::Error),
     #[error("host rejected authorization ({0})")]
     Denied(String),
     #[error("no paired host")]
@@ -44,6 +54,16 @@ impl Error {
     pub fn code(&self) -> &'static str {
         match self {
             Self::InvalidInvitation => "invalid_invitation",
+            Self::Cancelled => "cancelled",
+            Self::Rendezvous(error) => match error {
+                kausway_rendezvous::Error::NotFound => "rendezvous_not_found",
+                kausway_rendezvous::Error::Timeout => "rendezvous_timeout",
+                kausway_rendezvous::Error::Expired => "rendezvous_expired",
+                kausway_rendezvous::Error::InvalidRecord | kausway_rendezvous::Error::TooLarge => {
+                    "rendezvous_invalid_record"
+                }
+                _ => "rendezvous_unavailable",
+            },
             Self::Denied(_) => "authorization_denied",
             Self::NotPaired => "not_paired",
             Self::Closed => "closed",
@@ -63,6 +83,20 @@ impl From<ClientError> for Error {
 }
 fn storage(e: impl std::fmt::Display) -> Error {
     Error::Storage(e.to_string())
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PairingStage {
+    Resolving,
+    Connecting,
+}
+
+struct PairingProgress<'a>(&'a std::sync::Mutex<Option<PairingStage>>);
+impl Drop for PairingProgress<'_> {
+    fn drop(&mut self) {
+        *self.0.lock().unwrap_or_else(|p| p.into_inner()) = None;
+    }
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -85,6 +119,7 @@ pub struct Status {
     pub policy_enforcement: Option<String>,
     pub proxy_url: Option<String>,
     pub last_error: Option<String>,
+    pub pairing_stage: Option<PairingStage>,
 }
 struct Inner {
     proxy: Option<proxy::Proxy>,
@@ -99,9 +134,25 @@ pub struct Client {
     config: ClientConfig,
     endpoint: Endpoint,
     inner: Mutex<Inner>,
+    pair_gate: Mutex<()>,
+    pair_progress: std::sync::Mutex<Option<PairingStage>>,
+    pair_cancel: std::sync::Mutex<CancellationToken>,
+    shutdown: CancellationToken,
+    rendezvous_config: NetworkConfig,
+    rendezvous: OnceCell<Network>,
 }
 impl Client {
     pub async fn new(config: ClientConfig) -> Result<Self, Error> {
+        Self::new_with_rendezvous(config, NetworkConfig::default()).await
+    }
+    /// Overrides discovery only. Full URL pairing and saved-host reconnects never initialize it.
+    pub async fn new_with_rendezvous(
+        config: ClientConfig,
+        rendezvous_config: NetworkConfig,
+    ) -> Result<Self, Error> {
+        rendezvous_config
+            .validate()
+            .map_err(|_| Error::Configuration("invalid rendezvous settings".into()))?;
         if config.name.is_empty() || config.name.len() > 128 {
             return Err(Error::Configuration(
                 "device name must be 1..128 bytes".into(),
@@ -123,6 +174,12 @@ impl Client {
         Ok(Self {
             config,
             endpoint,
+            pair_gate: Mutex::new(()),
+            pair_progress: std::sync::Mutex::new(None),
+            pair_cancel: std::sync::Mutex::new(CancellationToken::new()),
+            shutdown: CancellationToken::new(),
+            rendezvous_config,
+            rendezvous: OnceCell::new(),
             inner: Mutex::new(Inner {
                 proxy: None,
                 closed: false,
@@ -132,12 +189,89 @@ impl Client {
             }),
         })
     }
-    pub async fn pair(&self, link: &str) -> Result<PairingResult, Error> {
+    /// Accept a full invitation URL or K1 short code. URLs bypass discovery entirely.
+    pub async fn pair(&self, input: &str) -> Result<PairingResult, Error> {
+        self.pair_with_progress(input, |_| {}).await
+    }
+
+    pub fn pairing_stage(&self) -> Option<PairingStage> {
+        *self.pair_progress.lock().unwrap_or_else(|p| p.into_inner())
+    }
+
+    pub fn cancel_pairing(&self) {
+        self.pair_cancel
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .cancel();
+    }
+
+    pub async fn pair_with_progress(
+        &self,
+        input: &str,
+        progress: impl Fn(PairingStage),
+    ) -> Result<PairingResult, Error> {
+        let _pair = tokio::select! {
+            biased;
+            _ = self.shutdown.cancelled() => return Err(Error::Closed),
+            guard = self.pair_gate.lock() => guard,
+        };
+        if self.inner.lock().await.closed {
+            return Err(Error::Closed);
+        }
+        let cancel = self.shutdown.child_token();
+        *self.pair_cancel.lock().unwrap_or_else(|p| p.into_inner()) = cancel.clone();
+        let _progress = PairingProgress(&self.pair_progress);
+        tokio::select! {
+            biased;
+            _ = cancel.cancelled() => if self.shutdown.is_cancelled() { Err(Error::Closed) } else { Err(Error::Cancelled) },
+            result = self.pair_input(input, &progress) => result,
+        }
+    }
+
+    async fn pair_input(
+        &self,
+        input: &str,
+        progress: &impl Fn(PairingStage),
+    ) -> Result<PairingResult, Error> {
+        let invite = if input
+            .trim()
+            .starts_with(kausway_transport::invite::LINK_PREFIX)
+        {
+            InviteLink::decode(input).map_err(|_| Error::InvalidInvitation)?
+        } else {
+            let code = Code::parse(input).map_err(|_| Error::InvalidInvitation)?;
+            *self.pair_progress.lock().unwrap_or_else(|p| p.into_inner()) =
+                Some(PairingStage::Resolving);
+            progress(PairingStage::Resolving);
+            tokio::time::timeout(self.rendezvous_config.timeout, async {
+                let network = self
+                    .rendezvous
+                    .get_or_try_init(|| Network::new_async(self.rendezvous_config.clone()))
+                    .await
+                    .map_err(Error::Rendezvous)?;
+                let secrets = code.secrets();
+                let key = secrets.public_key();
+                network
+                    .resolve_validated(&key, move |packet| {
+                        let now = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map(|time| time.as_secs())
+                            .unwrap_or(0);
+                        decode_packet(&secrets, packet, now)
+                    })
+                    .await
+                    .map_err(Error::Rendezvous)
+            })
+            .await
+            .map_err(|_| Error::Rendezvous(kausway_rendezvous::Error::Timeout))??
+        };
         let mut inner = self.inner.lock().await;
         if inner.closed {
             return Err(Error::Closed);
         }
-        let invite = InviteLink::decode(link).map_err(|_| Error::InvalidInvitation)?;
+        *self.pair_progress.lock().unwrap_or_else(|p| p.into_inner()) =
+            Some(PairingStage::Connecting);
+        progress(PairingStage::Connecting);
         if let Some(mut proxy) = inner.proxy.take() {
             proxy.stop().await;
         }
@@ -226,6 +360,7 @@ impl Client {
         Ok(())
     }
     pub async fn forget_pairing(&self) -> Result<(), Error> {
+        self.cancel_pairing();
         let mut inner = self.inner.lock().await;
         if inner.closed {
             return Err(Error::Closed);
@@ -260,6 +395,7 @@ impl Client {
             policy_enforcement: None,
             proxy_url: None,
             last_error: inner.last_error.clone(),
+            pairing_stage: self.pairing_stage(),
         };
         if let Some(proxy) = &inner.proxy {
             status.proxy_url = Some(proxy.connection.proxy_url.clone());
@@ -305,6 +441,8 @@ impl Client {
         status
     }
     pub async fn shutdown(&self) {
+        self.shutdown.cancel();
+        self.cancel_pairing();
         let mut inner = self.inner.lock().await;
         if let Some(mut proxy) = inner.proxy.take() {
             proxy.stop().await;

@@ -8,6 +8,7 @@ members = [
     "crates/kausway-host",
     "crates/kausway-client",
     "crates/kausway-client-android",
+    "crates/kausway-rendezvous",
 ]
 
 [workspace.package]
@@ -46,3 +47,4 @@ kausway-transport = { path = "crates/kausway-transport" }
 kausway-client = { path = "crates/kausway-client" }
 
 kausway-config = { path = "crates/kausway-config" }
+kausway-rendezvous = { path = "crates/kausway-rendezvous" }
