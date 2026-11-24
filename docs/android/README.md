@@ -259,8 +259,21 @@ CLI e2e script too. With a booted Android emulator, run
 `bash scripts/android/emulator-e2e.sh` from the repository root. It starts a real
 local host/origin and passes a single-use invite to instrumentation. The test
 validates JNI initialization/storage, pairing, HTTP Range, diagnostics and repeated
-start/stop, preserving the host's advertised addresses and adding emulator host alias 10.0.2.2
-as a fallback, with no public relay.
+start/stop, preserving the host's advertised addresses and adding emulator host alias
+10.0.2.2 for every advertised IPv4 port, with no public relay. The fixture waits
+up to 30 seconds for a usable emulator IPv4 address before initializing the SDK.
+Before pairing,
+a separate UDP echo fixture checks 1200-byte round trips from the emulator to
+the runner. This separates basic UDP reachability from a QUIC-specific failure;
+it does not replace the real Iroh pairing and Range checks.
+
+The test-results artifact includes initial/final host hints, runner/emulator
+addresses and routes, UDP probe counters and the `KauswayFixture` log tag.
+Invitation tokens and complete instrumentation arguments are not copied into
+these diagnostics. If UDP preflight fails, investigate emulator/runner routing.
+If it succeeds but pairing times out, investigate the QUIC path and compare the
+initial/final host ports. A successful TCP/ADB connection alone does not establish
+UDP reachability.
 
 The sample deliberately has no playback engine dependency; the Media3 integration
 snippet above is illustrative. Media3 playback, physical Android TV devices,

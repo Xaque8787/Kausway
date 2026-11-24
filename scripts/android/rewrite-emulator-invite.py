@@ -17,17 +17,18 @@ def emulator_invitation(link):
     # The emulator can reach the runner's LAN addresses through its virtual router.
     # Do not discard them: 10.0.2.2 is a special NAT alias, not the host's actual
     # interface address, and must not be the only route available on reconnect.
-    for address in addresses:
+    found_ipv4 = False
+    for address in tuple(addresses):
         socket = address.get('Ip')
         if socket is None:
             continue
         host, port = socket.rsplit(':', 1)
         if ipaddress.ip_address(host.strip('[]')).version == 4:
+            found_ipv4 = True
             fallback = {'Ip': f'10.0.2.2:{port}'}
             if fallback not in addresses:
                 addresses.append(fallback)
-            break
-    else:
+    if not found_ipv4:
         raise ValueError('Emulator fixture requires an advertised IPv4 host address')
     return PREFIX + base64.urlsafe_b64encode(json.dumps(doc).encode()).decode().rstrip('=')
 

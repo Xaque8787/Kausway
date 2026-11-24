@@ -6,8 +6,13 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
+import android.util.Log
 import java.io.File
+import java.net.DatagramPacket
+import java.net.DatagramSocket
+import java.net.InetAddress
 import java.net.HttpURLConnection
+import java.net.SocketTimeoutException
 import java.net.URL
 
 @RunWith(AndroidJUnit4::class)
@@ -18,6 +23,45 @@ class ClientLifecycleTest {
         val detail = if (error is KauswayException) "${error.code}: ${error.message}"
             else "${error.javaClass.simpleName}: ${error.message}"
         throw AssertionError("Android SDK stage failed: $name ($detail)", error)
+    }
+
+    private fun verifyRunnerUdp(routes: String) {
+        var reachable = false
+        val failures = mutableListOf<String>()
+        // 1200 bytes is the QUIC Initial minimum, unlike a small ping or TCP/ADB check.
+        val marker = "kausway-emulator-udp-v1:${java.util.UUID.randomUUID()}".toByteArray()
+        val payload = ByteArray(1200).also { marker.copyInto(it) }
+        for (route in routes.split(',').take(8)) {
+            try {
+                val host = route.substringBeforeLast(':')
+                val port = route.substringAfterLast(':').toInt()
+                DatagramSocket().use { socket ->
+                    socket.soTimeout = 1500
+                    socket.connect(InetAddress.getByName(host), port)
+                    for (attempt in 1..3) {
+                        socket.send(DatagramPacket(payload, payload.size))
+                        val reply = DatagramPacket(ByteArray(1201), 1201)
+                        try {
+                            socket.receive(reply)
+                        } catch (error: SocketTimeoutException) {
+                            if (attempt == 3) throw error
+                            continue
+                        }
+                        check(reply.length == payload.size && reply.data.copyOf(reply.length).contentEquals(payload)) {
+                            "UDP probe returned unexpected bytes"
+                        }
+                        break
+                    }
+                }
+                reachable = true
+                Log.i("KauswayFixture", "1200-byte UDP round trip succeeded: $route")
+            } catch (error: Exception) {
+                val failure = "$route: ${error.javaClass.simpleName}"
+                failures.add(failure)
+                Log.i("KauswayFixture", "UDP route failed: $failure")
+            }
+        }
+        check(reachable) { "No bidirectional 1200-byte UDP route from emulator to runner: ${failures.joinToString()}" }
     }
 
     @Test fun nativeLifecycleAndStorage() = runBlocking {
@@ -39,6 +83,9 @@ class ClientLifecycleTest {
     @Test fun realHostRangeAndReconnect() = runBlocking {
         val invite = InstrumentationRegistry.getArguments().getString("kauswayInvite")
         org.junit.Assume.assumeTrue("No real host fixture supplied", invite != null)
+        InstrumentationRegistry.getArguments().getString("kauswayUdpProbe")?.let { routes ->
+            stage("runner UDP preflight") { verifyRunnerUdp(routes) }
+        }
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val storage = File(context.noBackupFilesDir, "pair-${System.nanoTime()}")
         val client = KauswayClient.initialize(context, KauswayConfig(storage, relayUrl = "none"))

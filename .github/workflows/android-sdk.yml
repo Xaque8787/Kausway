@@ -38,7 +38,7 @@ jobs:
             ~/.gradle/wrapper
           key: sdk-${{ runner.os }}-${{ hashFiles('rust/Cargo.lock', 'sdks/android/**/*.gradle.kts', 'examples/android-basic/*.gradle.kts', 'sdks/android/gradle/wrapper/gradle-wrapper.properties') }}
           restore-keys: sdk-${{ runner.os }}-
-      - name: Emulator invitation fixture tests
+      - name: Emulator network fixture tests
         run: python3 -m unittest discover -s scripts/android -p 'test_*.py'
       - name: Rust tests and lint
         working-directory: rust
