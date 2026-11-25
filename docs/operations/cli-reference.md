@@ -1,6 +1,6 @@
 # CLI reference
 
-For development short-code generation, client input and discovery launch options, see [short-code pairing](short-code-pairing.md).
+For short-code generation, client input and discovery launch options, see [short-code pairing](short-code-pairing.md).
 
 This reference captures the implemented manager, host, admin and CLI client help.
 Run the same `--help` commands against your downloaded version to check for changes.

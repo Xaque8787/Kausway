@@ -1,6 +1,6 @@
 # Kausway Android SDK
 
-Development SDK builds accept short codes as well as invitation URLs. See [short-code pairing](../operations/short-code-pairing.md) for discovery configuration, progress and cancellation.
+The SDK accepts short codes as well as invitation URLs. See [short-code pairing](../operations/short-code-pairing.md) for version requirements, discovery configuration, progress and cancellation.
 
 Transport for existing Android HTTP clients and players. The SDK pairs with the
 unchanged protocol-v1 host and exposes its HTTP origin through an embedded loopback

@@ -109,7 +109,10 @@ transferring downloads; run executables and keep identities in Termux-private HO
 
 To pair with a new test host without disturbing an existing client, choose a
 previously unused data directory. Create a fresh invitation in the running host's
-admin UI and paste its **complete** `kausway://invite/...` link below:
+admin UI and paste its **complete** `kausway://invite/...` link below. With a
+short-code-capable host/client, you can instead select **Also generate a short
+code**, wait for publication acknowledgment and pass the code to `pair`. See
+[short-code pairing](../operations/short-code-pairing.md) for version requirements.
 
 ```sh
 CLIENT_DATA="$HOME/.local/share/kausway/client-new-host"

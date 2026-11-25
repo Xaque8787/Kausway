@@ -1,10 +1,18 @@
 # Short-code pairing
 
-Short-code support is currently a development feature. Use matching development
-host/admin/client binaries, the rebuilt Android SDK, and the rebuilt Jellyfin
-plugin. Published 0.5.0 assets predate this feature. The Android TV fork's input
-screen still needs a separate update; rebuilding its SDK alone does not remove
-its existing URL-only input validation.
+Short-code pairing requires Suite and Client releases containing rendezvous
+support, introduced in `0.6.0`. Download host/admin and the optional Jellyfin
+plugin from a [Suite release](https://github.com/Xaque8787/Kausway/releases),
+and the CLI client or Android SDK from a Client release. Container `0.1.1`
+packages Suite `0.6.0`. Original `0.5.0` assets predate this feature.
+For testing before publication, use matching development artifacts from the
+same source commit; see [artifact downloads](../development/ci.md#download-artifacts).
+
+The [Android TV fork](https://github.com/Xaque8787/iroh-androidtv) accepts codes
+and invitation URLs in its server connection field. After the new stable Client
+release is published, manually run its **App / Build** workflow on `master` with
+SDK selection `latest`. Check the APK artifact's recorded SDK version before
+testing; publishing a Kausway SDK does not automatically rebuild the TV app.
 
 An invitation can have a full `kausway://invite/...` URL and an optional
 `K1-XXXXXX-XXXXXX-XXXXXX` code. Either input redeems the same single-use token,

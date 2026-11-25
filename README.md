@@ -135,6 +135,12 @@ On the client device, extract the CLI archive from a published **Client** releas
 ./kausway-test-client --data-dir "$HOME/kausway-client" proxy --listen 127.0.0.1:8097
 ```
 
+For a shorter input, select **Also generate a short code** in admin and wait for
+publication acknowledgment. Pass the generated `K1-XXXXXX-XXXXXX-XXXXXX` code to
+`pair` in place of the full URL. Both inputs redeem the same invitation once.
+See [short-code pairing](docs/operations/short-code-pairing.md) for compatible
+versions and discovery requirements.
+
 Leave the proxy running and open `http://127.0.0.1:8097` in a browser on that device.
 Use the same client data directory on later starts to keep pairing. Invitations
 expire and are single use. Kausway pairing does not replace your application's

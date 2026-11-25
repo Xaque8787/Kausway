@@ -1,6 +1,6 @@
 # Jellyfin integration
 
-Development builds of the plugin and host support [short-code invitations](../operations/short-code-pairing.md) through the same separately supervised host.
+The plugin and host support [short-code invitations](../operations/short-code-pairing.md) through the same separately supervised host.
 
 Kausway can expose Jellyfin through a standalone host, the standard suite sidecar,
 or the combined source-built deployment below. The standard published Kausway
